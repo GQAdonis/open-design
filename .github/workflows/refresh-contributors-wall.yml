@@ -11,8 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: refresh-contributors-wall
@@ -45,6 +44,8 @@ jobs:
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
           repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Create refresh pull request
         uses: peter-evans/create-pull-request@v8
