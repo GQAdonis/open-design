@@ -3,6 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { composeSystemPrompt } from '../src/prompts/system.js';
 
 describe('composeSystemPrompt', () => {
+  it('carries the app locale and Chinese quick brief localization instructions', () => {
+    const prompt = composeSystemPrompt({
+      metadata: { kind: 'prototype', locale: 'zh-CN' } as any,
+    });
+
+    expect(prompt).toContain('- **appLocale**: zh-CN');
+    expect(prompt).toContain('localize every user-visible form string into Simplified Chinese');
+    expect(prompt).toContain('`Quick brief — 30 seconds` → `快速简报 — 30 秒`');
+    expect(prompt).toContain('`Target platform` → `目标平台`');
+    expect(prompt).toContain('`Visual tone` → `视觉风格`');
+    expect(prompt).toContain('"value": "pick_direction"');
+    expect(prompt).toContain('"value": "brand_spec"');
+    expect(prompt).toContain('"value": "reference_match"');
+  });
+
   it('treats an active design system as the visual direction', () => {
     const prompt = composeSystemPrompt({
       designSystemTitle: 'ComfyUI',

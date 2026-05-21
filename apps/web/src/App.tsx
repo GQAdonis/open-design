@@ -167,7 +167,7 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const clientType = useMemo(() => detectClientType(), []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
@@ -788,7 +788,7 @@ export function App() {
         skillId: input.skillId,
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,
-        metadata: input.metadata,
+        metadata: input.metadata ? { ...input.metadata, locale } : input.metadata,
         ...(input.pluginId ? { pluginId: input.pluginId } : {}),
         ...(input.appliedPluginSnapshotId
           ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
@@ -886,7 +886,7 @@ export function App() {
       navigate(projectRoute);
       return true;
     },
-    [analytics.track],
+    [analytics.track, locale],
   );
 
   const handleCreatePluginShareProject = useCallback(

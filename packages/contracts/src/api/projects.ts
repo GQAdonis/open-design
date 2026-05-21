@@ -89,6 +89,8 @@ export interface DesignSystemReviewEntry {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  /** UI locale active when the project was created; used to localize agent-visible forms. */
+  locale?: string;
   intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
