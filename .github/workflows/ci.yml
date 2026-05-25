@@ -80,6 +80,7 @@ jobs:
                 tools_dev_tests_required=true
                 tools_pack_tests_required=true
               fi
+              # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
               if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
                 nix_validation_required=true
               fi

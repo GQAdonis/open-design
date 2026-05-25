@@ -40,6 +40,8 @@
     perSystem = flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
       nodejs = pkgs.nodejs_24;
+      # Keep in sync with .github/workflows/ci.yml change_scopes
+      # nix_validation_required filter.
       daemonWorkspacePaths = [
         "packages/contracts"
         "packages/registry-protocol"
@@ -51,6 +53,8 @@
         "packages/diagnostics"
         "apps/daemon"
       ];
+      # Keep in sync with .github/workflows/ci.yml change_scopes
+      # nix_validation_required filter.
       webWorkspacePaths = [
         "packages/contracts"
         "packages/host"

@@ -196,7 +196,7 @@ jobs:
             fi
           } > "$body_file"
 
-          comment_id="$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$marker\")) | .id" | tail -n 1 || true)"
+          comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$marker\")) | .id" | tail -n 1 || true)"
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --field body="$(cat "$body_file")" >/dev/null
           else
