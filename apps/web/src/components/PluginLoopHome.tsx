@@ -131,6 +131,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
   function submit() {
     const trimmed = prompt.trim();
     if (!trimmed) return;
+    trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'submit', plugin_id: active?.record.id });
     onSubmit({
       prompt: trimmed,
       pluginId: active?.record.id ?? null,
@@ -204,7 +205,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
             type="button"
             className="plugin-loop-home__submit"
             data-testid="plugin-loop-submit"
-            onClick={() => { trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'submit', plugin_id: active?.record.id }); submit(); }}
+            onClick={submit}
             disabled={!canSubmit}
             title={canSubmit ? 'Press Enter to run' : 'Type something to run'}
           >
