@@ -43,16 +43,24 @@ export function normalizeVelaModelId(rawId: string): string | null {
 
 function normalizeKnownVelaVersionId(rawId: string): string | null {
   const gpt = /^gpt_(\d+)_(\d+)(.*)$/i.exec(rawId);
-  if (gpt) return `gpt-${gpt[1]}.${gpt[2]}${gpt[3].replace(/_/g, '-')}`;
+  if (gpt) {
+    const [, major, minor, suffix = ''] = gpt;
+    if (!major || !minor) return null;
+    return `gpt-${major}.${minor}${suffix.replace(/_/g, '-')}`;
+  }
 
   const gemini = /^gemini_(\d+)_(\d+)(.*)$/i.exec(rawId);
   if (gemini) {
-    return `gemini-${gemini[1]}.${gemini[2]}${gemini[3].replace(/_/g, '-')}`;
+    const [, major, minor, suffix = ''] = gemini;
+    if (!major || !minor) return null;
+    return `gemini-${major}.${minor}${suffix.replace(/_/g, '-')}`;
   }
 
   const minimax = /^minimax_m(\d+)_(\d+)(.*)$/i.exec(rawId);
   if (minimax) {
-    return `minimax-m${minimax[1]}.${minimax[2]}${minimax[3].replace(/_/g, '-')}`;
+    const [, major, minor, suffix = ''] = minimax;
+    if (!major || !minor) return null;
+    return `minimax-m${major}.${minor}${suffix.replace(/_/g, '-')}`;
   }
 
   return null;
