@@ -998,6 +998,15 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
+        ) : generationPreview ? (
+          <GenerationPreviewStage
+            model={generationPreview}
+            onRetry={
+              generationPreview.retryTarget && onRetry
+                ? () => onRetry(generationPreview.retryTarget!)
+                : undefined
+            }
+          />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
@@ -1097,15 +1106,6 @@ export function FileWorkspace({
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
-          />
-        ) : generationPreview ? (
-          <GenerationPreviewStage
-            model={generationPreview}
-            onRetry={
-              generationPreview.retryTarget && onRetry
-                ? () => onRetry(generationPreview.retryTarget!)
-                : undefined
-            }
           />
         ) : (
           <div className="viewer-empty">

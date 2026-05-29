@@ -2477,4 +2477,8 @@ export const zhCN: Dict = {
   'generationPreview.estimate': '通常需要 2–5 分钟',
   'generationPreview.progressAria': '生成进度：{percent}%',
   'generationPreview.retry': '重试',
+  'generationPreview.awaitingTitle': '等待你的补充',
+  'generationPreview.awaitingLead': '在左侧聊天里回答几个问题即可继续生成。',
+  'generationPreview.stoppedTitle': '生成已暂停',
+  'generationPreview.stoppedLead': '可在左侧聊天里继续未完成的步骤。',
 };

@@ -14,11 +14,13 @@ export function GenerationPreviewStage({ model, onRetry }: Props) {
   const t = useT();
   const [now, setNow] = useState(() => Date.now());
 
+  const generating = model.phase === 'generating';
+
   useEffect(() => {
-    if (model.failed) return undefined;
+    if (!generating) return undefined;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [model.failed, model.startedAt]);
+  }, [generating, model.startedAt]);
 
   const elapsedSec = Math.max(0, Math.round((now - model.startedAt) / 1000));
   const elapsedLabel = formatGenerationElapsed(elapsedSec);
@@ -29,26 +31,45 @@ export function GenerationPreviewStage({ model, onRetry }: Props) {
     prepare: t('generationPreview.stepPrepare'),
   };
 
+  const title =
+    model.phase === 'failed'
+      ? t('generationPreview.failedTitle')
+      : model.phase === 'stopped'
+        ? t('generationPreview.stoppedTitle')
+        : model.phase === 'awaiting-input'
+          ? t('generationPreview.awaitingTitle')
+          : t('generationPreview.title');
+
+  const lead =
+    model.phase === 'failed'
+      ? model.errorMessage || t('generationPreview.failedFallback')
+      : model.phase === 'stopped'
+        ? t('generationPreview.stoppedLead')
+        : model.phase === 'awaiting-input'
+          ? t('generationPreview.awaitingLead')
+          : model.activityLabel || t('generationPreview.footnote');
+
+  const markIcon =
+    model.phase === 'failed' ? 'close' : model.phase === 'stopped' ? 'stop' : 'sparkles';
+
   return (
     <section
       className={styles.stage}
       data-testid="generation-preview-stage"
+      data-phase={model.phase}
       aria-live="polite"
-      aria-busy={!model.failed}
+      aria-busy={generating}
     >
-      <div className={styles.mark} aria-hidden>
-        <Icon name="sparkles" size={24} />
+      <div className={styles.mark} data-active={generating} aria-hidden>
+        <Icon name={markIcon} size={24} />
       </div>
-      <h1 className={styles.title}>
-        {model.failed ? t('generationPreview.failedTitle') : t('generationPreview.title')}
-      </h1>
-      <p className={styles.lead}>
-        {model.failed
-          ? model.errorMessage || t('generationPreview.failedFallback')
-          : t('generationPreview.footnote')}
+      <h1 className={styles.title}>{title}</h1>
+      <p className={styles.lead} data-live={generating && Boolean(model.activityLabel)}>
+        {lead}
       </p>
       <div
         className={styles.progress}
+        data-active={generating}
         role="progressbar"
         aria-label={t('generationPreview.progressAria', { percent: model.progressPercent })}
         aria-valuemin={0}
@@ -66,23 +87,25 @@ export function GenerationPreviewStage({ model, onRetry }: Props) {
               ) : step.status === 'failed' ? (
                 <Icon name="close" size={12} />
               ) : (
-                <span className={styles.stepDot} />
+                <span className={styles.stepDot} data-running={step.status === 'running' && generating} />
               )}
             </span>
             <span className={styles.stepLabel}>{stepLabels[step.id]}</span>
           </li>
         ))}
       </ol>
-      <div className={styles.meta}>
-        <span data-testid="generation-preview-elapsed">
-          {t('generationPreview.elapsed', { elapsed: elapsedLabel })}
-        </span>
-        <span className={styles.metaDivider} aria-hidden>
-          ·
-        </span>
-        <span>{t('generationPreview.estimate')}</span>
-      </div>
-      {model.failed && onRetry ? (
+      {generating ? (
+        <div className={styles.meta}>
+          <span data-testid="generation-preview-elapsed">
+            {t('generationPreview.elapsed', { elapsed: elapsedLabel })}
+          </span>
+          <span className={styles.metaDivider} aria-hidden>
+            ·
+          </span>
+          <span>{t('generationPreview.estimate')}</span>
+        </div>
+      ) : null}
+      {model.phase === 'failed' && onRetry ? (
         <button
           type="button"
           className={styles.retry}

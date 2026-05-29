@@ -64,8 +64,122 @@ describe('generation preview helpers', () => {
       liveArtifacts: [],
     });
     expect(state).not.toBeNull();
-    expect(state?.steps[0]?.status).toBe('running');
+    expect(state?.phase).toBe('generating');
+    // A `thinking` status is enough evidence that the model started, so the
+    // first step has already advanced past "running".
+    expect(state?.steps[0]?.status).toBe('succeeded');
     expect(state?.retryTarget).toBeNull();
+  });
+
+  it('surfaces the latest activity snippet while generating', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      runStatus: 'running',
+      startedAt: Date.now(),
+      events: [
+        { kind: 'status', label: 'thinking' },
+        { kind: 'thinking', text: 'Sketching the hero section layout' },
+      ],
+    };
+    const state = buildGenerationPreviewState({
+      designSystemProject: false,
+      messages: [assistant],
+      streaming: true,
+      activeTab: null,
+      projectFiles: [],
+      liveArtifacts: [],
+    });
+    expect(state?.activityLabel).toBe('Sketching the hero section layout');
+  });
+
+  it('keeps a paused surface when the run was stopped without a preview', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: 'Partial work',
+      runStatus: 'canceled',
+      startedAt: Date.now() - 10_000,
+      events: [{ kind: 'tool_use', id: '1', name: 'Write', input: {} }],
+    };
+    const state = buildGenerationPreviewState({
+      designSystemProject: false,
+      messages: [assistant],
+      streaming: false,
+      activeTab: null,
+      projectFiles: [],
+      liveArtifacts: [],
+    });
+    expect(state?.phase).toBe('stopped');
+    expect(state?.failed).toBe(false);
+    expect(state?.retryTarget).toBeNull();
+  });
+
+  it('keeps a waiting surface when the agent is asking the user a question', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: 'A few quick questions:\n<question-form id="discovery" title="Brief">{"questions":[]}</question-form>',
+      runStatus: 'succeeded',
+      startedAt: Date.now() - 4_000,
+      events: [{ kind: 'text', text: '<question-form id="discovery">{"questions":[]}</question-form>' }],
+    };
+    const state = buildGenerationPreviewState({
+      designSystemProject: false,
+      messages: [assistant],
+      streaming: false,
+      activeTab: null,
+      projectFiles: [],
+      liveArtifacts: [],
+    });
+    expect(state?.phase).toBe('awaiting-input');
+    expect(state?.retryTarget).toBeNull();
+  });
+
+  it('returns null for a finished run that produced no question or preview', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: 'All done!',
+      runStatus: 'succeeded',
+      startedAt: Date.now() - 4_000,
+      events: [{ kind: 'text', text: 'All done!' }],
+    };
+    expect(
+      buildGenerationPreviewState({
+        designSystemProject: false,
+        messages: [assistant],
+        streaming: false,
+        activeTab: null,
+        projectFiles: [],
+        liveArtifacts: [],
+      }),
+    ).toBeNull();
+  });
+
+  it('builds a failed state with a retry target', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      runStatus: 'failed',
+      startedAt: Date.now() - 8_000,
+      events: [{ kind: 'text', text: 'Model request failed' }],
+    };
+    const state = buildGenerationPreviewState({
+      designSystemProject: false,
+      messages: [assistant],
+      streaming: false,
+      activeTab: null,
+      projectFiles: [],
+      liveArtifacts: [],
+      conversationError: 'Network error',
+    });
+    expect(state?.phase).toBe('failed');
+    expect(state?.failed).toBe(true);
+    expect(state?.errorMessage).toBe('Network error');
+    expect(state?.retryTarget).toBe(assistant);
   });
 
   it('hides preview state once a preview tab is active', () => {

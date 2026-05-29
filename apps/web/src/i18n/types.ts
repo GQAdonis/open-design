@@ -1844,6 +1844,10 @@ export interface Dict {
   'generationPreview.estimate': string;
   'generationPreview.progressAria': string;
   'generationPreview.retry': string;
+  'generationPreview.awaitingTitle': string;
+  'generationPreview.awaitingLead': string;
+  'generationPreview.stoppedTitle': string;
+  'generationPreview.stoppedLead': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;

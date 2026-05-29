@@ -1,7 +1,9 @@
 import type { AgentEvent, ChatMessage, LiveArtifactSummary, ProjectFile } from '../types';
-import { isLiveArtifactTabId } from '../types';
+import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 
 export type GenerationStepStatus = 'pending' | 'running' | 'succeeded' | 'failed';
+
+export type GenerationPhase = 'generating' | 'awaiting-input' | 'stopped' | 'failed';
 
 export interface GenerationPreviewStep {
   id: 'understand' | 'generate' | 'prepare';
@@ -11,10 +13,21 @@ export interface GenerationPreviewStep {
 export interface GenerationPreviewModel {
   startedAt: number;
   steps: GenerationPreviewStep[];
+  phase: GenerationPhase;
   failed: boolean;
   errorMessage: string | null;
   progressPercent: number;
+  /**
+   * Latest human-readable activity snippet pulled from the streamed
+   * events. Only set while actively generating so the waiting surface
+   * shows real movement instead of a frozen card.
+   */
+  activityLabel: string | null;
 }
+
+// Matches the inline forms the agent emits to ask the user clarifying
+// questions before continuing (see artifacts/question-form.ts).
+const QUESTION_FORM_RE = /<(question-form|ask-question)\b/i;
 
 const PREVIEWABLE_FILE = /\.(html?|jsx|tsx|svg|md|pdf|pptx?|key)$/i;
 
@@ -28,7 +41,7 @@ export function workspaceHasPreviewSurface(input: {
   const active = input.activeTab;
   if (!active) return false;
   if (isLiveArtifactTabId(active)) {
-    return input.liveArtifacts.some((entry) => entry.tabId === active);
+    return input.liveArtifacts.some((entry) => liveArtifactTabId(entry.id) === active);
   }
   const file = input.projectFiles.find((item) => item.name === active);
   if (!file) return false;
@@ -85,17 +98,40 @@ export function buildGenerationPreviewState(input: {
 
   if (!latestAssistant) return null;
 
-  const runActive = isActiveRunStatus(latestAssistant.runStatus) || input.streaming;
-  const runFailed = latestAssistant.runStatus === 'failed';
-  if (!runActive && !runFailed) return null;
-  if (hasPreviewSurface && !runFailed) return null;
+  const status = latestAssistant.runStatus;
+  const runActive = isActiveRunStatus(status) || input.streaming;
+  const runFailed = status === 'failed';
+  const runStopped = status === 'canceled';
+  // The agent finished its turn but is waiting on the user to answer an
+  // inline question form before it can keep going.
+  const awaitingInput =
+    !runActive && !runFailed && !runStopped && messageHasPendingQuestion(latestAssistant);
 
+  let phase: GenerationPhase;
+  if (runFailed) {
+    phase = 'failed';
+  } else if (runActive) {
+    phase = 'generating';
+  } else if (runStopped) {
+    phase = 'stopped';
+  } else if (awaitingInput) {
+    phase = 'awaiting-input';
+  } else {
+    return null;
+  }
+
+  // Once the user has something previewable, only the error state takes
+  // over the surface; the calmer waiting states defer to the live preview
+  // so we never hide a finished artifact behind a status card.
+  if (hasPreviewSurface && phase !== 'failed') return null;
+
+  const failed = phase === 'failed';
   const events = latestAssistant.events ?? [];
   const derived = deriveGenerationPreviewModel({
     events,
     hasArtifactHtml: Boolean(input.artifactHtml?.trim()),
     hasPreviewSurface,
-    failed: runFailed,
+    failed,
     errorMessage: input.conversationError,
   });
 
@@ -104,10 +140,12 @@ export function buildGenerationPreviewState(input: {
   return {
     startedAt,
     steps: derived.steps,
-    failed: runFailed,
+    phase,
+    failed,
     errorMessage: derived.errorMessage,
     progressPercent: derived.progressPercent,
-    retryTarget: runFailed ? latestAssistant : null,
+    activityLabel: phase === 'generating' ? latestActivityLabel(events) : null,
+    retryTarget: failed ? latestAssistant : null,
   };
 }
 
@@ -184,6 +222,35 @@ export function formatGenerationElapsed(seconds: number): string {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+function messageHasPendingQuestion(message: ChatMessage): boolean {
+  if (typeof message.content === 'string' && QUESTION_FORM_RE.test(message.content)) {
+    return true;
+  }
+  const events = message.events ?? [];
+  return events.some((event) => event.kind === 'text' && QUESTION_FORM_RE.test(event.text));
+}
+
+function latestActivityLabel(events: AgentEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.kind === 'thinking' && event.text.trim()) {
+      return truncateActivity(event.text);
+    }
+    if (event.kind === 'text' && event.text.trim() && !QUESTION_FORM_RE.test(event.text)) {
+      return truncateActivity(event.text);
+    }
+    if (event.kind === 'status' && event.detail?.trim()) {
+      return truncateActivity(event.detail);
+    }
+  }
+  return null;
+}
+
+function truncateActivity(text: string): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  return collapsed.length > 80 ? `${collapsed.slice(0, 79)}…` : collapsed;
 }
 
 function eventsHaveStatus(events: AgentEvent[], labels: string[]): boolean {
