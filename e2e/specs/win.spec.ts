@@ -39,7 +39,8 @@ const externalUpdateVersion = normalizeOptionalEnv(
 );
 const useExternalUpdateFeed = externalUpdateMetadataUrl != null;
 const verifyViolentUpdater = !useExternalUpdateFeed && process.env.OD_PACKAGED_E2E_WIN_UPDATER_VIOLENT !== '0';
-const verifyRealUpdateInstaller = process.env.OD_PACKAGED_E2E_WIN_REAL_UPDATE_INSTALL === '1';
+const verifyRealUpdateInstaller =
+  useExternalUpdateFeed || process.env.OD_PACKAGED_E2E_WIN_REAL_UPDATE_INSTALL === '1';
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario: PackagedUpdateScenario = verifyCoreOnly
@@ -539,9 +540,10 @@ winDescribe('packaged windows runtime smoke', () => {
       }
 
       if (verifyRealUpdateInstaller) {
-        realUpdateInstaller = await measureSmokeStep(timings, 'real public update installer acceptance', async () =>
+        realUpdateInstaller = await measureSmokeStep(timings, 'real update installer acceptance', async () =>
           runRealUpdateInstallerAcceptance({
             installDir: install.installDir,
+            metadataUrl: updaterFixture?.info.metadataUrl ?? `https://releases.open-design.ai/${updateScenario.channel}/latest/metadata.json`,
             startDesktop: async (step) => {
               start = await startDesktop(step);
               return start;
@@ -849,6 +851,7 @@ function isViolentUpdaterFixture(value: UpdaterFixtureProcess | null): value is 
 
 async function runRealUpdateInstallerAcceptance(options: {
   installDir: string;
+  metadataUrl: string;
   startDesktop: (step: string) => Promise<WinStartResult>;
   stopDesktop: (step: string) => Promise<WinStopResult>;
 }): Promise<RealUpdateInstallerSummary> {
@@ -856,32 +859,32 @@ async function runRealUpdateInstallerAcceptance(options: {
     throw new Error('OD_PACKAGED_E2E_WIN_REAL_UPDATE_INSTALL requires OD_PACKAGED_E2E_RELEASE_CHANNEL and OD_PACKAGED_E2E_RELEASE_VERSION');
   }
   const expectedUpdateRoot = await resolveExpectedUpdateRoot(options.installDir);
-  await options.stopDesktop('stop before real public update installer');
+  await options.stopDesktop('stop before real update installer');
   await clearUpdateRoot(expectedUpdateRoot);
   applyManualPackagedUpdateEnv(
     process.env,
     updateScenario,
-    `https://releases.open-design.ai/${updateScenario.channel}/latest/metadata.json`,
+    options.metadataUrl,
   );
-  await options.startDesktop('start real public update installer');
+  await options.startDesktop('start real update installer');
   await waitForHealthyDesktop();
   const available = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'check']);
   expect(
     available.update?.state === 'available' || available.update?.state === 'downloaded',
-    `real public update available: ${formatUnknown(available)}`,
+    `real update available: ${formatUnknown(available)}`,
   ).toBe(true);
   if (available.update?.state !== 'downloaded') {
-    await runUpdaterDownload('real public update silent download');
+    await runUpdaterDownload('real update silent download');
   }
   const downloaded = await waitForUpdaterStatus(
     (inspect) => inspect.update?.state === 'downloaded',
-    'real public update downloaded',
+    'real update downloaded',
     10 * 60_000,
   );
   const downloadedPath = downloaded.update?.downloadPath;
-  if (downloadedPath == null) throw new Error(`real public update did not expose a downloadPath: ${formatUnknown(downloaded)}`);
+  if (downloadedPath == null) throw new Error(`real update did not expose a downloadPath: ${formatUnknown(downloaded)}`);
   expectPathInside(downloadedPath, expectedUpdateRoot);
-  await options.stopDesktop('stop before installing real public update');
+  await options.stopDesktop('stop before installing real update');
   const installResult = await runDirectInstaller(downloadedPath, options.installDir);
   expect(installResult.code).toBe(0);
   const list = await runToolsPackJson<WinListResult>('list');
