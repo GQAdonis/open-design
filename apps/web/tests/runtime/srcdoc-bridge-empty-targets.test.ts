@@ -166,6 +166,7 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<main data-od-id="hero"><h1 id="title">Hero</h1></main>',
       'inspect',
+      ['[data-od-id="hero"]'],
     );
 
     await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
@@ -190,6 +191,7 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<main data-od-id="hero">Hero</main>',
       'inspect',
+      ['[data-od-id="hero"]'],
     );
 
     await new Promise<void>((resolve) => win.setTimeout(resolve, 10));

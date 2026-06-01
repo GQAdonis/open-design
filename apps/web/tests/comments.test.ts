@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBoardCommentAttachments,
   buildVisualAnnotationAttachment,
+  commentSnapshotOverlayEqual,
   commentVisibleOnDeckSlide,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
@@ -267,7 +268,7 @@ describe('preview comment attachment helpers', () => {
     expect(commentVisibleOnDeckSlide({}, 1)).toBe(true);
   });
 
-  it('treats live comment target maps with identical overlay bounds as equal', () => {
+  it('keeps overlay equality separate from stored target metadata updates', () => {
     const base: PreviewCommentSnapshot = {
       filePath: 'index.html',
       elementId: 'hero-title',
@@ -279,7 +280,8 @@ describe('preview comment attachment helpers', () => {
     };
     const current = new Map([['hero-title', base]]);
     const next = new Map([['hero-title', { ...base, text: 'Hello world' }]]);
-    expect(liveCommentTargetMapsEqual(current, next)).toBe(true);
+    expect(commentSnapshotOverlayEqual(base, next.get('hero-title')!)).toBe(true);
+    expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
     next.set('hero-title', { ...base, position: { x: 13, y: 24, width: 120, height: 32 } });
     expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
   });

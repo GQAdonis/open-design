@@ -141,6 +141,25 @@ export function commentSnapshotOverlayEqual(
   );
 }
 
+export function commentSnapshotEqual(
+  a: PreviewCommentSnapshot,
+  b: PreviewCommentSnapshot,
+): boolean {
+  if (!commentSnapshotOverlayEqual(a, b)) return false;
+  return (
+    a.selector === b.selector
+    && a.label === b.label
+    && trimContextText(a.text) === trimContextText(b.text)
+    && trimHtmlHint(a.htmlHint) === trimHtmlHint(b.htmlHint)
+    && normalizeSelectionKind(a.selectionKind) === normalizeSelectionKind(b.selectionKind)
+    && normalizeMemberCount(a.memberCount) === normalizeMemberCount(b.memberCount)
+    && JSON.stringify(normalizeStyle(a.style) ?? null) === JSON.stringify(normalizeStyle(b.style) ?? null)
+    && JSON.stringify(normalizeMembers(a.podMembers)) === JSON.stringify(normalizeMembers(b.podMembers))
+    && normalizeHoverPoint(a.hoverPoint).x === normalizeHoverPoint(b.hoverPoint).x
+    && normalizeHoverPoint(a.hoverPoint).y === normalizeHoverPoint(b.hoverPoint).y
+  );
+}
+
 export function liveCommentTargetMapsEqual(
   current: Map<string, PreviewCommentSnapshot>,
   next: Map<string, PreviewCommentSnapshot>,
@@ -148,7 +167,7 @@ export function liveCommentTargetMapsEqual(
   if (current.size !== next.size) return false;
   for (const [elementId, snapshot] of current) {
     const candidate = next.get(elementId);
-    if (!candidate || !commentSnapshotOverlayEqual(snapshot, candidate)) return false;
+    if (!candidate || !commentSnapshotEqual(snapshot, candidate)) return false;
   }
   return true;
 }
@@ -431,6 +450,26 @@ function normalizePosition(input: PreviewComment['position']): PreviewComment['p
 
 function finite(value: number | undefined): number {
   return Number.isFinite(value) ? Math.round(value as number) : 0;
+}
+
+function normalizeSelectionKind(
+  selectionKind: PreviewCommentSnapshot['selectionKind'],
+): PreviewCommentSelectionKind {
+  return selectionKind === 'pod' ? 'pod' : 'element';
+}
+
+function normalizeMemberCount(value: number | undefined): number | undefined {
+  return Number.isFinite(value) ? Math.round(value as number) : undefined;
+}
+
+function normalizeHoverPoint(
+  input: PreviewCommentSnapshot['hoverPoint'],
+): { x: number | undefined; y: number | undefined } {
+  if (!input) return { x: undefined, y: undefined };
+  return {
+    x: Number.isFinite(input.x) ? Math.round(input.x) : undefined,
+    y: Number.isFinite(input.y) ? Math.round(input.y) : undefined,
+  };
 }
 
 function normalizeMembers(input: PreviewCommentMember[] | undefined): PreviewCommentMember[] {

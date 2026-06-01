@@ -93,7 +93,7 @@ import { Toast } from './Toast';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
-  commentSnapshotOverlayEqual,
+  commentSnapshotEqual,
   commentTargetDisplayName,
   commentVisibleOnDeckSlide,
   commentsToAttachments,
@@ -5279,14 +5279,14 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           if (current.selectionKind === 'pod') return current;
           const updated = next.get(current.elementId);
           if (!updated || !isValidCommentOverlayPosition(updated.position)) return null;
-          return commentSnapshotOverlayEqual(current, updated) ? current : updated;
+          return commentSnapshotEqual(current, updated) ? current : updated;
         });
         setHoveredCommentTarget((current) => {
           if (!current) return null;
           if (current.selectionKind === 'pod') return current;
           const updated = next.get(current.elementId);
           if (!updated || !isValidCommentOverlayPosition(updated.position)) return null;
-          return commentSnapshotOverlayEqual(current, updated) ? current : updated;
+          return commentSnapshotEqual(current, updated) ? current : updated;
         });
         return;
       }
@@ -5295,16 +5295,16 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         setLiveCommentTargets((current) => {
           const existing = current.get(snapshot.elementId);
-          if (existing && commentSnapshotOverlayEqual(existing, snapshot)) return current;
+          if (existing && commentSnapshotEqual(existing, snapshot)) return current;
           return new Map(current).set(snapshot.elementId, snapshot);
         });
         setActiveCommentTarget((current) => (
-          current && current.elementId === snapshot.elementId && !commentSnapshotOverlayEqual(current, snapshot)
+          current && current.elementId === snapshot.elementId && !commentSnapshotEqual(current, snapshot)
             ? snapshot
             : current
         ));
         setHoveredCommentTarget((current) => (
-          current && current.elementId === snapshot.elementId && !commentSnapshotOverlayEqual(current, snapshot)
+          current && current.elementId === snapshot.elementId && !commentSnapshotEqual(current, snapshot)
             ? snapshot
             : current
         ));
@@ -5318,11 +5318,11 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         setHoveredCommentTarget((current) => (
-          current && commentSnapshotOverlayEqual(current, snapshot) ? current : snapshot
+          current && commentSnapshotEqual(current, snapshot) ? current : snapshot
         ));
         setLiveCommentTargets((current) => {
           const existing = current.get(snapshot.elementId);
-          if (existing && commentSnapshotOverlayEqual(existing, snapshot)) return current;
+          if (existing && commentSnapshotEqual(existing, snapshot)) return current;
           return new Map(current).set(snapshot.elementId, snapshot);
         });
         return;
@@ -6865,6 +6865,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           selectionKind: comment.selectionKind ?? 'element',
           memberCount: comment.memberCount,
           podMembers: comment.podMembers,
+          ...(typeof comment.slideIndex === 'number' ? { slideIndex: comment.slideIndex } : {}),
         };
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
