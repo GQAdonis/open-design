@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
+import { composerText, typeAndSettle } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -135,18 +136,22 @@ function renderComposer(
     />
   );
 
-  if (options.locale) {
-    return render(
-      <I18nProvider initial={options.locale}>
-        {tree}
-      </I18nProvider>,
-    );
-  }
-
-  return render(
-    tree,
-  );
+  return options.locale
+    ? render(<I18nProvider initial={options.locale}>{tree}</I18nProvider>)
+    : render(tree);
 }
+
+// Flush the composer's lazy mount fetches (MCP servers, installed plugins,
+// connectors) so the @-picker lists are populated before we drive the editor.
+async function flushMounts() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+// The contenteditable serializes newlines as `<br>`, which jsdom's
+// `.textContent` drops — so use the Lexical-aware `composerText()` helper for
+// every editor-text assertion (it walks the tree and emits real `\n`s).
 
 beforeEach(() => {
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
@@ -183,7 +188,14 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    throw new Error(`unexpected fetch ${url}`);
+    // Any other lazy mount fetch (e.g. /api/connectors) returns an empty-OK
+    // body. flushMounts() awaits these, so throwing here would surface as an
+    // unhandled rejection during the await; an empty payload keeps the picker
+    // lists empty without breaking the render.
+    return new Response('[]', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   });
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -199,12 +211,11 @@ describe('ChatComposer context pickers', () => {
     skills = [];
     servers = [];
     renderComposer();
+    await flushMounts();
 
-    fireEvent.change(screen.getByTestId('chat-composer-input'), {
-      target: { value: '@', selectionStart: 1 },
-    });
+    await typeAndSettle('@');
 
-    expect(screen.getByTestId('mention-popover')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('mention-popover')).toBeTruthy());
     expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
@@ -218,13 +229,11 @@ describe('ChatComposer context pickers', () => {
     skills = [];
     servers = [];
     renderComposer({}, { locale: 'zh-CN' });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@', selectionStart: 1 },
-    });
+    await typeAndSettle('@');
 
-    expect(screen.getByRole('tab', { name: '全部' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('tab', { name: '全部' })).toBeTruthy());
     expect(screen.getByRole('tab', { name: '插件' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: '技能' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
@@ -232,44 +241,46 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: '设计文件' })).toBeTruthy();
     expect(screen.getByText('搜索插件、技能、MCP 服务器、连接器和设计文件。')).toBeTruthy();
 
-    fireEvent.change(input, {
-      target: { value: '@missing', selectionStart: 8 },
-    });
+    await typeAndSettle('@missing');
 
-    expect(screen.getByText('没有找到“missing”的结果。')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('没有找到“missing”的结果。')).toBeTruthy());
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@sl', selectionStart: 3 },
-    });
+    await typeAndSettle('@sl');
 
     await waitFor(() => expect(screen.getByText('Slack MCP')).toBeTruthy());
     fireEvent.click(screen.getByText('Slack MCP'));
 
-    expect(input.value).toBe('@Slack MCP ');
-    expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@Slack MCP');
+    await waitFor(() => expect(composerText()).toBe('@Slack MCP '));
+    const pill = screen
+      .getByTestId('chat-composer-input')
+      .querySelector('.composer-inline-mention');
+    expect(pill?.textContent).toBe('@Slack MCP');
+    expect(pill?.getAttribute('data-mention-kind')).toBe('mcp');
   });
 
   it('applies a skill from @ search and reports the active project skill', async () => {
     const onProjectSkillChange = vi.fn();
     renderComposer({ onProjectSkillChange });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@deck', selectionStart: 5 },
-    });
+    await typeAndSettle('@deck');
 
     await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
     fireEvent.click(screen.getByText('Deck Builder'));
 
     await waitFor(() => expect(onProjectSkillChange).toHaveBeenCalledWith('deck-builder'));
-    expect(input.value).toBe('@Deck Builder ');
-    expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@Deck Builder');
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+    const pill = screen
+      .getByTestId('chat-composer-input')
+      .querySelector('.composer-inline-mention');
+    expect(pill?.textContent).toBe('@Deck Builder');
+    expect(pill?.getAttribute('data-mention-kind')).toBe('skill');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {
@@ -296,11 +307,9 @@ describe('ChatComposer context pickers', () => {
       }),
     ];
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@audit', selectionStart: 6 },
-    });
+    await typeAndSettle('@audit');
 
     await waitFor(() => expect(screen.getByText('Audit Helper 9')).toBeTruthy());
     const skillNames = Array.from(
@@ -315,17 +324,19 @@ describe('ChatComposer context pickers', () => {
 
   it('applies a plugin from @ search and keeps the plugin token inline', async () => {
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@export', selectionStart: 7 },
-    });
+    await typeAndSettle('@export');
 
     await waitFor(() => expect(screen.getByText('My Export')).toBeTruthy());
     fireEvent.click(screen.getByText('My Export'));
 
-    await waitFor(() => expect(input.value).toBe('@My Export '));
-    expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@My Export');
+    await waitFor(() => expect(composerText()).toBe('@My Export '));
+    const pill = screen
+      .getByTestId('chat-composer-input')
+      .querySelector('.composer-inline-mention');
+    expect(pill?.textContent).toBe('@My Export');
+    expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
   });
 
   it('removes the inline design file token when its staged chip is removed', async () => {
@@ -341,21 +352,22 @@ describe('ChatComposer context pickers', () => {
         },
       ],
     });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: 'Use @landing', selectionStart: 12 },
-    });
+    await typeAndSettle('Use @landing');
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
 
-    expect(input.value).toBe('Use @designs/landing.html ');
+    await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
     expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
-    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Remove landing.html'));
+      await Promise.resolve();
+    });
 
-    expect(input.value).toBe('Use ');
+    await waitFor(() => expect(composerText()).toBe('Use '));
     expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
@@ -372,21 +384,34 @@ describe('ChatComposer context pickers', () => {
         },
       ],
     });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
-    const draft = 'Plan:\n\n@landing\n\nKeep spacing';
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: draft, selectionStart: 'Plan:\n\n@landing'.length },
-    });
+    // Open the @ picker mid-draft and pick the file — that stages the
+    // attachment AND inserts the atomic pill (typing alone never stages). The
+    // surrounding `\n\n` runs are preserved as LineBreakNodes.
+    await typeAndSettle('Plan:\n\n@landing');
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
 
-    expect(input.value).toBe('Plan:\n\n@designs/landing.html \n\nKeep spacing');
+    await waitFor(() =>
+      expect(composerText()).toBe('Plan:\n\n@designs/landing.html '),
+    );
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
-    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+    // The user keeps typing after the trailing space; re-seed the full draft to
+    // capture that, then remove the staged chip.
+    await typeAndSettle('Plan:\n\n@designs/landing.html \n\nKeep spacing');
+    await waitFor(() =>
+      expect(composerText()).toBe('Plan:\n\n@designs/landing.html \n\nKeep spacing'),
+    );
 
-    expect(input.value).toBe('Plan:\n\n\n\nKeep spacing');
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Remove landing.html'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(composerText()).toBe('Plan:\n\n\n\nKeep spacing'));
     expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
@@ -403,25 +428,22 @@ describe('ChatComposer context pickers', () => {
         },
       ],
     });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: 'Use @landing', selectionStart: 12 },
-    });
+    await typeAndSettle('Use @landing');
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
+    await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
 
-    fireEvent.change(input, {
-      target: {
-        value: 'Use @designs/landing.html, please',
-        selectionStart: 'Use @designs/landing.html, please'.length,
-      },
+    await typeAndSettle('Use @designs/landing.html, please');
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Remove landing.html'));
+      await Promise.resolve();
     });
 
-    fireEvent.click(screen.getByLabelText('Remove landing.html'));
-
-    expect(input.value).toBe('Use , please');
+    await waitFor(() => expect(composerText()).toBe('Use , please'));
     expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
@@ -438,30 +460,28 @@ describe('ChatComposer context pickers', () => {
         },
       ],
     });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    await flushMounts();
 
-    fireEvent.change(input, {
-      target: { value: '@landing', selectionStart: 8 },
-    });
+    await typeAndSettle('@landing');
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
+    await waitFor(() => expect(composerText()).toBe('@designs/landing.html '));
 
-    fireEvent.change(input, {
-      target: {
-        value: '"@designs/landing.html"',
-        selectionStart: '"@designs/landing.html"'.length,
-      },
+    await typeAndSettle('"@designs/landing.html"');
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Remove landing.html'));
+      await Promise.resolve();
     });
 
-    fireEvent.click(screen.getByLabelText('Remove landing.html'));
-
-    expect(input.value).toBe('""');
+    await waitFor(() => expect(composerText()).toBe('""'));
     expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
   it('lets the tools panel switch between Official and My plugins', async () => {
     renderComposer();
+    await flushMounts();
     fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
 
     await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
@@ -498,4 +518,5 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByRole('button', { name: 'Pets — wake, tuck, or pick one' })).toBeNull();
     expect(screen.queryByText('Buddy')).toBeNull();
   });
+
 });

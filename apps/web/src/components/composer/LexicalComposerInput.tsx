@@ -456,7 +456,7 @@ export const LexicalComposerInput = forwardRef<
             const after = $getSelection();
             if ($isRangeSelection(after)) after.insertText(' ');
           }
-        });
+        }, { discrete: true });
       },
       replaceActiveTrigger(text: string) {
         const editor = editorRef.current;
@@ -472,7 +472,7 @@ export const LexicalComposerInput = forwardRef<
           deleteActiveTrigger(sel, /(^|\s)[@/][^\s@]*$/);
           const active = $getSelection();
           if ($isRangeSelection(active)) active.insertText(text);
-        });
+        }, { discrete: true });
       },
     }),
     [],
@@ -486,7 +486,10 @@ export const LexicalComposerInput = forwardRef<
             <ContentEditable
               data-testid="chat-composer-input"
               className="ph-no-capture composer-editable"
-              ariaLabel={placeholder}
+              aria-placeholder={placeholder}
+              placeholder={
+                <div className="composer-input-placeholder">{placeholder}</div>
+              }
             />
           }
           placeholder={

@@ -6307,17 +6307,23 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
     }
 
-    if (!srcDocShellReady) {
+    if (useLazySrcDocTransport && !srcDocShellReady) {
       await waitForIframeLoadOrTimeout(srcDocIframe, 500);
     }
-    const activated = activateSrcDocSnapshotTransport(srcDocIframe);
-    if (activated) {
+    if (useLazySrcDocTransport && activateSrcDocSnapshotTransport(srcDocIframe)) {
       await waitForIframeLoadOrTimeout(srcDocIframe);
     }
-    return requestPreviewSnapshot(srcDocIframe);
+    const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
+    try {
+      await waitForAnimationFrame();
+      return requestPreviewSnapshot(srcDocIframe);
+    } finally {
+      restoreVisibility();
+    }
   }, [
     activateSrcDocSnapshotTransport,
     srcDocShellReady,
+    useLazySrcDocTransport,
     useUrlLoadPreview,
   ]);
 
@@ -7289,6 +7295,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 <PreviewDrawOverlay
                   active={drawOverlayOpen}
                   onActiveChange={setDrawOverlayOpen}
+                  captureViewport
+                  captureSnapshot={captureExportImageSnapshot}
                   captureTarget={null}
                   filePath={file.name}
                   sendDisabled={streaming}

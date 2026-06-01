@@ -7,6 +7,12 @@ import { ChatComposer } from '../../src/components/ChatComposer';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 import { uploadProjectFiles } from '../../src/providers/registry';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+import {
+  composerText,
+  pressEnter,
+  typeAndSettle,
+  typeInComposer,
+} from '../helpers/lexical-composer';
 import type { ChatAttachment, ChatCommentAttachment } from '../../src/types';
 
 vi.mock('../../src/providers/registry', async () => {
@@ -76,9 +82,7 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('chat-composer-input'), {
-      target: { value: 'follow-up while busy' },
-    });
+    await typeAndSettle('follow-up while busy');
     fireEvent.click(screen.getByTestId('chat-send'));
 
     expect(onSend).toHaveBeenCalledWith('follow-up while busy', [], [], undefined);
@@ -319,7 +323,7 @@ describe('ChatComposer /search command', () => {
     });
   });
 
-  it('previews a staged image attachment from its chip', () => {
+  it('previews a staged image attachment from its chip', async () => {
     const longName = 'drawing-2026-05-13T09-25-03-040Z-with-extra-long-name.png';
     render(
       <ChatComposer
@@ -341,8 +345,8 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    const input = screen.getByTestId('chat-composer-input');
-    fireEvent.change(input, { target: { value: '@drawing' } });
+    await typeAndSettle('@drawing');
+    await waitFor(() => expect(screen.getByText(`uploads/${longName}`)).toBeTruthy());
     fireEvent.click(screen.getByText(`uploads/${longName}`));
 
     const chip = screen.getByTestId('staged-attachments').querySelector('.staged-chip.staged-image');
@@ -383,7 +387,7 @@ describe('ChatComposer /search command', () => {
     expect(css).toContain('object-fit: contain;');
   });
 
-  it('expands /search into a first-action research command prompt', () => {
+  it('expands /search into a first-action research command prompt', async () => {
     const onSend = vi.fn();
 
     render(
@@ -398,11 +402,10 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    const input = screen.getByTestId('chat-composer-input');
-    fireEvent.change(input, { target: { value: '/search EV market 2025 trends' } });
+    await typeAndSettle('/search EV market 2025 trends');
     fireEvent.click(screen.getByTestId('chat-send'));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, attachments, commentAttachments, meta] = onSend.mock.calls[0]!;
     expect(prompt).toContain(
       'Before answering, your first tool action must be the OD research command for your shell.',
@@ -435,7 +438,7 @@ describe('ChatComposer /search command', () => {
     });
   });
 
-  it('keeps shell metacharacters out of the concrete OD command examples', () => {
+  it('keeps shell metacharacters out of the concrete OD command examples', async () => {
     const onSend = vi.fn();
 
     render(
@@ -451,12 +454,11 @@ describe('ChatComposer /search command', () => {
     );
 
     const query = "$TSLA `date` $(echo hacked) Bob's";
-    fireEvent.change(screen.getByTestId('chat-composer-input'), {
-      target: { value: `/search ${query}` },
-    });
+    await typeAndSettle(`/search ${query}`);
     fireEvent.click(screen.getByTestId('chat-send'));
 
-    const [prompt, _attachments, _commentAttachments, meta] = onSend.mock.calls[0]!;
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    const [prompt, , , meta] = onSend.mock.calls[0]!;
     expect(prompt).toContain(
       'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
     );
@@ -467,7 +469,7 @@ describe('ChatComposer /search command', () => {
     });
   });
 
-  it('does not send research metadata for normal prompts', () => {
+  it('does not send research metadata for normal prompts', async () => {
     const onSend = vi.fn();
 
     render(
@@ -482,12 +484,10 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('chat-composer-input'), {
-      target: { value: 'EV market 2025 trends' },
-    });
+    await typeAndSettle('EV market 2025 trends');
     fireEvent.click(screen.getByTestId('chat-send'));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, attachments, commentAttachments, meta] = onSend.mock.calls[0]!;
     expect(prompt).toBe('EV market 2025 trends');
     expect(attachments).toEqual([]);
@@ -495,7 +495,7 @@ describe('ChatComposer /search command', () => {
     expect(meta).toBeUndefined();
   });
 
-  it('does not expand manually typed /search when research is unavailable', () => {
+  it('does not expand manually typed /search when research is unavailable', async () => {
     const onSend = vi.fn();
 
     render(
@@ -510,12 +510,10 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    fireEvent.change(screen.getByTestId('chat-composer-input'), {
-      target: { value: '/search EV market 2025 trends' },
-    });
+    await typeAndSettle('/search EV market 2025 trends');
     fireEvent.click(screen.getByTestId('chat-send'));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, attachments, commentAttachments, meta] = onSend.mock.calls[0]!;
     expect(prompt).toBe('/search EV market 2025 trends');
     expect(attachments).toEqual([]);
@@ -537,15 +535,14 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: 'hello world' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    await typeAndSettle('hello world');
+    pressEnter();
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     expect(onSend).toHaveBeenCalledWith('hello world', [], [], undefined);
   });
 
-  it('keeps keyboard submits blocked when sending is disabled', () => {
+  it('keeps keyboard submits blocked when sending is disabled', async () => {
     const onSend = vi.fn();
 
     render(
@@ -561,13 +558,12 @@ describe('ChatComposer /search command', () => {
       />,
     );
 
-    const input = screen.getByTestId('chat-composer-input');
-    fireEvent.change(input, { target: { value: 'keep this draft' } });
-    fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    typeInComposer('keep this draft');
+    pressEnter({ meta: true });
+    pressEnter();
 
     expect(onSend).not.toHaveBeenCalled();
-    expect((input as HTMLTextAreaElement).value).toBe('keep this draft');
+    expect(composerText()).toContain('keep this draft');
   });
 });
 

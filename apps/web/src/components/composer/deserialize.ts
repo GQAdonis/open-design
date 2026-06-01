@@ -18,36 +18,44 @@ export function setComposerFromText(
   text: string,
   entities: InlineMentionEntity[],
 ): void {
-  editor.update(() => {
-    const root = $getRoot();
-    root.clear();
-    const p = $createParagraphNode();
-    const lines = text.split('\n');
-    lines.forEach((line, i) => {
-      if (i > 0) p.append($createLineBreakNode());
-      if (!line) return;
-      const parts = buildInlineMentionParts(line, entities, { highlightUnknown: false });
-      if (!parts) {
-        p.append($createTextNode(line));
-        return;
-      }
-      for (const part of parts) {
-        if (part.kind === 'mention' && part.entity.kind !== 'unknown') {
-          p.append(
-            $createMentionNode({
-              mentionId: part.entity.id,
-              mentionKind: part.entity.kind,
-              token: part.text,
-              label: part.entity.label,
-              title: part.entity.title,
-            }),
-          );
-        } else if (part.text) {
-          p.append($createTextNode(part.text));
+  // `discrete: true` commits the update synchronously. This matters both for
+  // tests reading the state back on the next line AND for the host's
+  // setText/clear → onChange round-trip, where a deferred update could let a
+  // stale serialize slip through before the rebuild lands. On a mounted editor
+  // it behaves like a normal update (just flushed immediately).
+  editor.update(
+    () => {
+      const root = $getRoot();
+      root.clear();
+      const p = $createParagraphNode();
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        if (i > 0) p.append($createLineBreakNode());
+        if (!line) return;
+        const parts = buildInlineMentionParts(line, entities, { highlightUnknown: false });
+        if (!parts) {
+          p.append($createTextNode(line));
+          return;
         }
-      }
-    });
-    root.append(p);
-    p.selectEnd();
-  });
+        for (const part of parts) {
+          if (part.kind === 'mention' && part.entity.kind !== 'unknown') {
+            p.append(
+              $createMentionNode({
+                mentionId: part.entity.id,
+                mentionKind: part.entity.kind,
+                token: part.text,
+                label: part.entity.label,
+                title: part.entity.title,
+              }),
+            );
+          } else if (part.text) {
+            p.append($createTextNode(part.text));
+          }
+        }
+      });
+      root.append(p);
+      p.selectEnd();
+    },
+    { discrete: true },
+  );
 }
