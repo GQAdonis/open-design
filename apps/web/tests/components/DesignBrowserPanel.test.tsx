@@ -401,6 +401,7 @@ describe('REFERENCE_GROUPS catalogue', () => {
       'https://transitions.dev/',
       'https://fonts.google.com/',
       'https://animography.net/',
+      'https://reactbits.dev/text-animations/shiny-text',
       'https://toolfolio.io/',
       'https://www.whirrls.com/',
       'https://startups.gallery/',

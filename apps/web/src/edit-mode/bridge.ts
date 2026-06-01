@@ -346,11 +346,11 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = closestTarget(ev);
     if (!el) return;
     var kind = inferKind(el);
+    window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     if (kind === 'text' || kind === 'link') {
       makeEditable(el, ev);
       return;
     }
-    window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;

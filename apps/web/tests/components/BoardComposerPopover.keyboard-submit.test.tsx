@@ -26,15 +26,19 @@ function renderPopover({
   onSendBatch = () => {},
   sending = false,
   selectionKind = 'element',
+  targetOverride = {},
+  bounds,
 }: {
   onSaveComment?: () => void;
   onSendBatch?: () => void;
   sending?: boolean;
   selectionKind?: PreviewCommentSnapshot['selectionKind'];
+  targetOverride?: Partial<PreviewCommentSnapshot>;
+  bounds?: { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 } = {}) {
   return render(
     <BoardComposerPopover
-      target={{ ...target, selectionKind }}
+      target={{ ...target, ...targetOverride, selectionKind }}
       existing={null}
       draft="Tighten this heading"
       notes={[]}
@@ -47,6 +51,7 @@ function renderPopover({
       onRemoveMember={() => {}}
       sending={sending}
       t={((key: string) => String(key)) as never}
+      bounds={bounds}
     />,
   );
 }
@@ -103,5 +108,20 @@ describe('BoardComposerPopover keyboard submit', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onSaveComment).not.toHaveBeenCalled();
+  });
+
+  it('keeps the full composer inside the visible preview bounds for low targets', () => {
+    renderPopover({
+      targetOverride: {
+        position: { x: 24, y: 560, width: 120, height: 40 },
+      },
+      bounds: { width: 800, height: 600 },
+    });
+
+    const popover = screen.getByTestId('comment-popover');
+    const top = Number.parseInt(popover.style.top, 10);
+
+    expect(top).toBeLessThanOrEqual(266);
+    expect(Number.parseInt(popover.style.maxHeight, 10)).toBeGreaterThan(0);
   });
 });

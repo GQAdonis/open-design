@@ -636,7 +636,7 @@ function annotateMissingOdIds(doc: string): string {
 
 function injectManualEditBridge(doc: string): string {
   const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
-  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(true));
+  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {

@@ -152,7 +152,7 @@ export type ManualEditPendingStyleSave = {
   version: number;
 };
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
-type PreviewCanvasSize = { width: number; height: number };
+type PreviewCanvasSize = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type PreviewViewportPreset = {
   id: PreviewViewportId;
   width: number | null;
@@ -663,16 +663,26 @@ function usePreviewCanvasSize<T extends HTMLElement>() {
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setSize({ width: rect.width, height: rect.height });
+      setSize({
+        width: rect.width,
+        height: rect.height,
+        scrollLeft: el.scrollLeft,
+        scrollTop: el.scrollTop,
+      });
     };
     measure();
+    let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(measure);
+      observer = new ResizeObserver(measure);
       observer.observe(el);
-      return () => observer.disconnect();
     }
+    el.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      el.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
   }, []);
 
   return [ref, size] as const;
@@ -4168,6 +4178,7 @@ function HtmlViewer({
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
+  const [manualEditSrcDocActive, setManualEditSrcDocActive] = useState(false);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
@@ -4220,12 +4231,15 @@ function HtmlViewer({
     setManualEditModeRaw((prev) => {
       const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(prev) : next;
       if (value !== prev && !value) {
-        setManualEditFrozenSource(null);
         setManualEditViewportWidth(null);
       }
       return value;
     });
   }, []);
+  useEffect(() => {
+    setManualEditSrcDocActive(false);
+    setManualEditFrozenSource(null);
+  }, [projectId, file.name]);
   useEffect(() => {
     onCommentModeChange?.(commentPanelOpen);
   }, [commentPanelOpen, onCommentModeChange]);
@@ -4626,6 +4640,7 @@ function HtmlViewer({
     : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
+  const manualEditRequiresSrcDoc = manualEditSrcDocActive && !urlModeBridge;
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
@@ -4654,7 +4669,7 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
-  });
+  }) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll`,
     [projectId, file.name, file.mtime, reloadKey],
@@ -4705,11 +4720,11 @@ function HtmlViewer({
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       selectionBridge: true,
-      editBridge: manualEditMode,
+      editBridge: manualEditRequiresSrcDoc,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -4743,7 +4758,7 @@ function HtmlViewer({
   // a postMessage activation that can race (#2253) and strand the iframe blank
   // (#2361, #2791).
   const captureModeActive = drawOverlayOpen;
-  const useLazySrcDocTransport = !manualEditMode && !captureModeActive && useUrlLoadPreview;
+  const useLazySrcDocTransport = !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
@@ -4815,24 +4830,6 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview]);
-  
-  // Leaving Manual Edit swaps the iframe from a fully materialized srcDoc
-  // document back to the lazy transport shell. Remount the shell before
-  // activation; posting into the old edit document can mark the new HTML as
-  // activated, then React replaces the iframe with an empty shell and the
-  // dedupe check suppresses the real activation.
-  const prevManualEditModeRef = useRef(manualEditMode);
-  useEffect(() => {
-    const wasInEditMode = prevManualEditModeRef.current;
-    const isNowInEditMode = manualEditMode;
-    prevManualEditModeRef.current = isNowInEditMode;
-
-    if (wasInEditMode && !isNowInEditMode && !useUrlLoadPreview) {
-      activatedSrcDocTransportHtmlRef.current = null;
-      setSrcDocShellReady(false);
-      setSrcDocTransportResetKey((key) => key + 1);
-    }
-  }, [manualEditMode, useUrlLoadPreview]);
   
   useEffect(() => {
     restorePreviewScrollPosition();
@@ -5433,18 +5430,11 @@ function HtmlViewer({
     setManualEditError(null);
   }
 
-  function refreshSrcDocPreviewAfterManualEditExit() {
-    activatedSrcDocTransportHtmlRef.current = null;
-    setSrcDocShellReady(false);
-    setSrcDocTransportResetKey((key) => key + 1);
-  }
-
   async function exitManualEditModeAfterFlush(): Promise<boolean> {
     const ok = await flushManualEditStyleSave();
     if (!ok) return false;
     setManualEditPanelPosition(null);
     setManualEditMode(false);
-    refreshSrcDocPreviewAfterManualEditExit();
     return true;
   }
 
@@ -5457,7 +5447,6 @@ function HtmlViewer({
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
     setManualEditError(null);
     setManualEditMode(false);
-    refreshSrcDocPreviewAfterManualEditExit();
     postSelectedManualEditTargetToIframe(null);
   }
 
@@ -6292,6 +6281,7 @@ function HtmlViewer({
       setDrawOverlayOpen(false);
       setMode('preview');
       setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
+      setManualEditSrcDocActive(true);
       setManualEditMode(true);
       closeArtifactToolMenus();
       return;
@@ -6756,7 +6746,9 @@ function HtmlViewer({
       canRedo={manualEditUndone.length > 0}
       busy={manualEditSaving}
       pageStylesEnabled={manualEditPageStylesEnabled}
-      onSelectTarget={selectManualEditTarget}
+      onSelectTarget={(target) => {
+        void selectManualEditTarget(target, { pinned: true });
+      }}
       onDraftChange={setManualEditDraft}
       onStyleChange={(id, styles, label) => {
         void handleManualEditStyleChange(id, styles, label);

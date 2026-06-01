@@ -828,6 +828,53 @@ describe('FileViewer SVG artifacts', () => {
     expect(srcDocFrameAfter?.srcdoc).toContain('data-od-edit-bridge');
   });
 
+  it('keeps the srcDoc edit transport active after canceling manual edit', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    const editFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.srcdoc).toContain('data-od-edit-bridge');
+      return frame;
+    });
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'));
+    const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+
+    expect(previewFrame).toBe(editFrame);
+    expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
+    expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
+  });
+
   it('keeps the manual edit inspector pinned after clicking a target', async () => {
     const heroTarget = manualEditTarget('hero-card', 'Hero card', 20);
     const trendTarget = manualEditTarget('trend-card', 'Trend card', 320);

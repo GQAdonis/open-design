@@ -177,6 +177,7 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
       { label: 'Motion Sites', url: 'https://motionsites.ai/', detail: 'High-end motion and interaction references.' },
       { label: 'Motion.page Showcase', url: 'https://motion.page/showcase/', detail: 'Scroll and timeline animation inspiration.' },
       { label: 'Animography', url: 'https://animography.net/', detail: 'Animated type and kinetic lettering.' },
+      { label: 'React Bits Shiny Text', url: 'https://reactbits.dev/text-animations/shiny-text', detail: 'React text animation reference for shiny kinetic type.' },
     ],
   },
   {

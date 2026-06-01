@@ -1,5 +1,5 @@
 import type { ChangeEvent, ClipboardEvent, CSSProperties } from 'react';
-import { useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
@@ -45,8 +45,9 @@ function compactFontFamily(value: string | undefined): string | null {
 }
 
 type AnnotationStyleRow = { label: string; value: string; swatch?: string };
-type PopoverBounds = { width: number; height: number };
+type PopoverBounds = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type PopoverOffset = { x: number; y: number };
+type PopoverSize = { width: number; height: number };
 
 function annotationStyleRows(target: PreviewCommentSnapshot): AnnotationStyleRow[] {
   const rows: AnnotationStyleRow[] = [];
@@ -88,6 +89,7 @@ function popoverAnchorStyle(
   bounds?: PopoverBounds,
   offset: PopoverOffset = { x: 0, y: 0 },
   expanded = true,
+  measuredSize?: PopoverSize,
 ): CSSProperties {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const anchor = target.hoverPoint ?? {
@@ -103,6 +105,10 @@ function popoverAnchorStyle(
   const preferredLeft = clampPopoverCoordinate(anchorX + pad, pad);
   const preferredTop = clampPopoverCoordinate(anchorY + pad, pad);
   if (bounds?.width && bounds.width > 0) {
+    const viewportLeft = Math.max(0, bounds.scrollLeft ?? 0);
+    const viewportTop = Math.max(0, bounds.scrollTop ?? 0);
+    const viewportRight = viewportLeft + bounds.width;
+    const viewportBottom = bounds.height ? viewportTop + bounds.height : Number.POSITIVE_INFINITY;
     const position = target.position;
     const rect = {
       left: offset.x + position.x * safeScale,
@@ -112,56 +118,57 @@ function popoverAnchorStyle(
     };
     const rectRight = rect.left + rect.width;
     const rectBottom = rect.top + rect.height;
-    const viewportWidth = bounds.width;
-    const viewportHeight = bounds.height || Number.POSITIVE_INFINITY;
-    const maxLeft = Math.max(pad, viewportWidth - width - pad);
-    const maxTop = Number.isFinite(viewportHeight)
-      ? Math.max(pad, viewportHeight - estimatedHeight - pad)
+    const measuredWidth = measuredSize?.width && measuredSize.width > 0 ? measuredSize.width : width;
+    const measuredHeight = measuredSize?.height && measuredSize.height > 0
+      ? measuredSize.height
+      : expanded
+        ? 320
+        : estimatedHeight;
+    const minLeft = viewportLeft + pad;
+    const minTop = viewportTop + pad;
+    const maxLeft = Math.max(minLeft, viewportRight - measuredWidth - pad);
+    const maxTop = Number.isFinite(viewportBottom)
+      ? Math.max(minTop, viewportBottom - measuredHeight - pad)
       : preferredTop;
     const spaces = [
-      { side: 'top' as const, space: rect.top - pad, fits: rect.top - pad >= estimatedHeight },
-      { side: 'bottom' as const, space: viewportHeight - rectBottom - pad, fits: viewportHeight - rectBottom - pad >= estimatedHeight },
-      { side: 'left' as const, space: rect.left - pad, fits: rect.left - pad >= width },
-      { side: 'right' as const, space: viewportWidth - rectRight - pad, fits: viewportWidth - rectRight - pad >= width },
+      { side: 'top' as const, space: rect.top - viewportTop - pad, fits: rect.top - viewportTop - pad >= measuredHeight },
+      { side: 'bottom' as const, space: viewportBottom - rectBottom - pad, fits: viewportBottom - rectBottom - pad >= measuredHeight },
+      { side: 'left' as const, space: rect.left - viewportLeft - pad, fits: rect.left - viewportLeft - pad >= measuredWidth },
+      { side: 'right' as const, space: viewportRight - rectRight - pad, fits: viewportRight - rectRight - pad >= measuredWidth },
     ];
     const sorted = spaces
       .filter((item) => Number.isFinite(item.space))
       .sort((a, b) => Number(b.fits) - Number(a.fits) || b.space - a.space);
     const side = sorted[0]?.side ?? 'bottom';
-    const centerLeft = rect.left + rect.width / 2 - width / 2;
-    const centerTop = rect.top + rect.height / 2 - estimatedHeight / 2;
-    if (side === 'top' && sorted[0]?.fits) {
+    const centerLeft = rect.left + rect.width / 2 - measuredWidth / 2;
+    const centerTop = rect.top + rect.height / 2 - measuredHeight / 2;
+    const withVisibleHeight = (left: number, top: number): CSSProperties => {
+      const clampedTop = clampPopoverRange(top, minTop, maxTop);
+      const maxHeight = Number.isFinite(viewportBottom)
+        ? Math.max(120, Math.floor(viewportBottom - clampedTop - pad))
+        : undefined;
       return {
-        left: clampPopoverRange(centerLeft, pad, maxLeft),
-        top: clampPopoverRange(rect.top - estimatedHeight - pad, pad, maxTop),
+        left: clampPopoverRange(left, minLeft, maxLeft),
+        top: clampedTop,
+        ...(maxHeight ? { maxHeight } : {}),
       };
+    };
+    if (side === 'top' && sorted[0]?.fits) {
+      return withVisibleHeight(centerLeft, rect.top - measuredHeight - pad);
     }
     if (side === 'bottom' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(centerLeft, pad, maxLeft),
-        top: clampPopoverRange(rectBottom + pad, pad, maxTop),
-      };
+      return withVisibleHeight(centerLeft, rectBottom + pad);
     }
     if (side === 'left' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(rect.left - width - pad, pad, maxLeft),
-        top: clampPopoverRange(centerTop, pad, maxTop),
-      };
+      return withVisibleHeight(rect.left - measuredWidth - pad, centerTop);
     }
     if (side === 'right' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(rectRight + pad, pad, maxLeft),
-        top: clampPopoverRange(centerTop, pad, maxTop),
-      };
+      return withVisibleHeight(rectRight + pad, centerTop);
     }
-    return {
-      left: clampPopoverRange(
-        anchorX + pad + width <= viewportWidth - pad ? anchorX + pad : anchorX - width - pad,
-        pad,
-        maxLeft,
-      ),
-      top: clampPopoverRange(anchorY + overlapOffset, pad, maxTop),
-    };
+    return withVisibleHeight(
+      anchorX + pad + measuredWidth <= viewportRight - pad ? anchorX + pad : anchorX - measuredWidth - pad,
+      anchorY + overlapOffset,
+    );
   }
   return {
     left: preferredLeft,
@@ -277,6 +284,28 @@ export function BoardComposerPopover({
   const podMembers = target.podMembers ?? [];
   const composingRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [popoverSize, setPopoverSize] = useState<PopoverSize | undefined>(undefined);
+  useLayoutEffect(() => {
+    const node = popoverRef.current;
+    if (!node) return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const next = {
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      };
+      if (next.width <= 0 || next.height <= 0) return;
+      setPopoverSize((current) =>
+        current?.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [commenting, draft, images.length, existingImages.length, notes.length, podMembers.length]);
   // An attached image alone is enough to send (the element context rides along
   // even without a typed note).
   const sendDisabled = (pendingCount === 0 && images.length === 0) || sending;
@@ -303,12 +332,13 @@ export function BoardComposerPopover({
   }
   return (
     <div
+      ref={popoverRef}
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
       aria-label="Annotation"
-      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting)}
+      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting, popoverSize)}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
