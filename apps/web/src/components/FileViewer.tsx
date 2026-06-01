@@ -715,6 +715,30 @@ function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): P
   });
 }
 
+function waitForAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+    window.setTimeout(resolve, 0);
+  });
+}
+
+function temporarilyExposeIframeForSnapshot(iframe: HTMLIFrameElement): () => void {
+  const previousVisibility = iframe.style.visibility;
+  const previousOpacity = iframe.style.opacity;
+  const previousPointerEvents = iframe.style.pointerEvents;
+  iframe.style.visibility = 'visible';
+  iframe.style.opacity = '0.001';
+  iframe.style.pointerEvents = 'none';
+  return () => {
+    iframe.style.visibility = previousVisibility;
+    iframe.style.opacity = previousOpacity;
+    iframe.style.pointerEvents = previousPointerEvents;
+  };
+}
+
 function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
   return `${projectId}:${file.path || file.name}`;
 }

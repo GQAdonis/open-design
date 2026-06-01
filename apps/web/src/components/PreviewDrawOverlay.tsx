@@ -408,23 +408,6 @@ export function PreviewDrawOverlay({
     ctx.restore();
   }
 
-  async function fallbackInkBlob(): Promise<Blob | null> {
-    const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return null;
-    const rect = wrap.getBoundingClientRect();
-    const out = document.createElement('canvas');
-    out.width = canvas.width;
-    out.height = canvas.height;
-    const ctx = out.getContext('2d');
-    if (!ctx) return null;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, out.width, out.height);
-    drawCaptureTarget(ctx, out.width / Math.max(1, rect.width), out.height / Math.max(1, rect.height), captureTarget);
-    ctx.drawImage(canvas, 0, 0);
-    return new Promise((resolve) => out.toBlob((blob) => resolve(blob), 'image/png'));
-  }
-
   async function compositeWithBackground(snap: PreviewSnapshot): Promise<Blob | null> {
     const frameRect = captureSnapshot
       ? wrapRef.current?.getBoundingClientRect()
@@ -483,21 +466,16 @@ export function PreviewDrawOverlay({
         const snap = await requestSnapshot();
         if (snap) blob = await compositeWithBackground(snap);
         if (!blob) {
-          blob = await fallbackInkBlob();
+          setCaptureWarning({
+            action,
+            message: captureViewport && !hasInk && !hasBox && !hasTarget
+              ? t('chat.annotationPreviewMissing')
+              : t('chat.annotationPreviewMissingInk'),
+          });
+          return;
         }
-        if (!blob) {
-          if (captureViewport && !hasInk && !hasBox && !hasTarget && !note.trim()) {
-            setCaptureWarning({
-              action,
-              message: t('chat.annotationPreviewMissing'),
-            });
-            return;
-          }
-        }
-        if (blob) {
-          const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
-        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
       }
       const kind = markKind();
       const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {

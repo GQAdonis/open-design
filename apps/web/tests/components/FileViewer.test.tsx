@@ -47,6 +47,8 @@ import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
+const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -77,6 +79,63 @@ function deferredResponse() {
 
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
+}
+
+function installCanvasSnapshotMocks() {
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+
+    set src(_value: string) {
+      window.setTimeout(() => this.onload?.(), 0);
+    }
+  }
+
+  vi.stubGlobal('Image', MockImage as unknown as typeof Image);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
+    beginPath: vi.fn(),
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    fillText: vi.fn(),
+    lineCap: 'round',
+    lineJoin: 'round',
+    lineTo: vi.fn(),
+    lineWidth: 1,
+    measureText: vi.fn(() => ({ width: 0 })),
+    moveTo: vi.fn(),
+    restore: vi.fn(),
+    save: vi.fn(),
+    scale: vi.fn(),
+    setLineDash: vi.fn(),
+    stroke: vi.fn(),
+    strokeRect: vi.fn(),
+    fillStyle: '',
+    font: '',
+    strokeStyle: '',
+  }) as unknown as CanvasRenderingContext2D) as unknown as HTMLCanvasElement['getContext']);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback: BlobCallback) => {
+    callback(new Blob(['png'], { type: 'image/png' }));
+  });
+}
+
+function installPreviewSnapshotBridge(iframe: HTMLIFrameElement) {
+  const source = iframe.contentWindow;
+  if (!source) throw new Error('Expected preview iframe contentWindow');
+  return vi.spyOn(source, 'postMessage').mockImplementation((message: unknown) => {
+    const data = message as { type?: string; id?: string } | null;
+    if (!data || data.type !== 'od:snapshot' || !data.id) return;
+    window.dispatchEvent(new MessageEvent('message', {
+      source,
+      data: {
+        type: 'od:snapshot:result',
+        id: data.id,
+        dataUrl: TEST_SNAPSHOT_DATA_URL,
+        w: 2,
+        h: 2,
+      },
+    }));
+  });
 }
 
 describe('FileViewer preview scale', () => {
@@ -2057,6 +2116,7 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('lets Draw direct send emit a queued annotation while a task is running', async () => {
     const annotationSpy = vi.fn();
+    installCanvasSnapshotMocks();
 
     window.addEventListener(ANNOTATION_EVENT, annotationSpy);
 
@@ -2068,6 +2128,12 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     clickAgentTool('draw-overlay-toggle');
+    const srcDocFrame = await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return activeFrame;
+    });
+    installPreviewSnapshotBridge(srcDocFrame);
     fireEvent.change(screen.getByPlaceholderText('Add a note for this mark'), {
       target: { value: 'mark this' },
     });
@@ -2092,6 +2158,7 @@ describe('FileViewer tweaks toolbar', () => {
         filePath: 'preview.html',
       },
     });
+    expect(annotationSpy.mock.calls[0]?.[0].detail.file).toBeInstanceOf(File);
     window.removeEventListener(ANNOTATION_EVENT, annotationSpy);
   });
 

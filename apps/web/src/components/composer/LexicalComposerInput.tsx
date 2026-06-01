@@ -43,6 +43,87 @@ import {
   type InlineMentionEntity,
 } from '../../utils/inlineMentions';
 
+// A serializable caret box the host portal positions against. Sampled from the
+// live DOM selection at trigger-detection time (same tick as detection) so it
+// never lags editor state. All coordinates are viewport-space
+// (getBoundingClientRect), matching the position:fixed portal's space.
+export interface CaretRect {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+// Real caret = zero width, non-zero height. Reject the all-zero rect browsers
+// return when there is "no geometry yet" (line start, right after inserting an
+// atomic MentionNode, empty line).
+function isUsableRect(r: DOMRect): boolean {
+  return r.height > 0 && (r.top !== 0 || r.left !== 0 || r.bottom !== 0);
+}
+
+function toCaretRect(r: DOMRect): CaretRect {
+  return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+}
+
+// Read the caret's viewport rect via the native selection, with four ordered
+// fallbacks for the collapsed-caret 0×0 case: (1) range bounding rect,
+// (2) range client-rects list, (3) a zero-width probe range cloned at the
+// anchor text offset, (4) the anchor element box, then the editor root.
+function readCaretRect(rootEl: HTMLElement | null): CaretRect | null {
+  if (typeof window === 'undefined') return null;
+  const winSel = window.getSelection();
+  if (winSel && winSel.rangeCount > 0) {
+    const range = winSel.getRangeAt(0);
+
+    // jsdom does not implement Range geometry — guard every native call so a
+    // missing method falls through to the element/root box instead of throwing.
+    if (typeof range.getBoundingClientRect === 'function') {
+      const r = range.getBoundingClientRect();
+      if (isUsableRect(r)) return toCaretRect(r);
+    }
+    if (typeof range.getClientRects === 'function') {
+      const rects = range.getClientRects();
+      if (rects.length > 0 && isUsableRect(rects[0]!)) return toCaretRect(rects[0]!);
+    }
+
+    const anchorNode = range.startContainer;
+    if (anchorNode.nodeType === Node.TEXT_NODE) {
+      try {
+        const probe = document.createRange();
+        const len = (anchorNode as Text).length;
+        const off = Math.min(range.startOffset, len);
+        probe.setStart(anchorNode, off);
+        probe.setEnd(anchorNode, off);
+        if (typeof probe.getBoundingClientRect === 'function') {
+          const pr = probe.getBoundingClientRect();
+          if (isUsableRect(pr)) return toCaretRect(pr);
+        }
+        if (typeof probe.getClientRects === 'function') {
+          const prList = probe.getClientRects();
+          if (prList.length > 0 && isUsableRect(prList[0]!)) return toCaretRect(prList[0]!);
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    const el =
+      anchorNode.nodeType === Node.ELEMENT_NODE
+        ? (anchorNode as HTMLElement)
+        : anchorNode.parentElement;
+    if (el) {
+      const er = el.getBoundingClientRect();
+      if (isUsableRect(er)) {
+        return { top: er.top, bottom: er.bottom, left: er.left, right: er.left };
+      }
+    }
+  }
+  if (rootEl) {
+    const rr = rootEl.getBoundingClientRect();
+    return { top: rr.top, bottom: rr.bottom, left: rr.left, right: rr.left };
+  }
+  return null;
+}
+
 // One @mention to insert into the editor. `token` is the literal "@…" text
 // (already produced by `inlineMentionToken(label)`); `entity` carries the
 // id/kind/label/title used to drive the pill styling + staged sync.
@@ -65,6 +146,7 @@ export interface LexicalComposerInputProps {
   onTrigger(state: {
     mention: { q: string } | null;
     slash: { q: string } | null;
+    anchorRect: CaretRect | null;
   }): void;
   // Plain Enter (no popover, no IME) — host submits the turn.
   onEnterSend(): void;
@@ -76,6 +158,9 @@ export interface LexicalComposerInputProps {
   onPopoverKey(
     key: 'ArrowDown' | 'ArrowUp' | 'Tab' | 'Enter' | 'Escape',
   ): boolean;
+  // Optional combobox a11y. When set, the ContentEditable announces the active
+  // mention row (id lives in the portaled listbox) without moving DOM focus.
+  comboboxAria?: { activeId: string | null; expanded: boolean };
 }
 
 // Imperative surface the host drives. Mirrors the old textareaRef operations
@@ -153,20 +238,25 @@ function TriggerPlugin({
       editorState.read(() => {
         const sel = $getSelection();
         if (!$isRangeSelection(sel) || !sel.isCollapsed()) {
-          onTriggerRef.current({ mention: null, slash: null });
+          onTriggerRef.current({ mention: null, slash: null, anchorRect: null });
           return;
         }
         const node = sel.anchor.getNode();
         if (!$isTextNode(node) || $isMentionNode(node)) {
-          onTriggerRef.current({ mention: null, slash: null });
+          onTriggerRef.current({ mention: null, slash: null, anchorRect: null });
           return;
         }
         const before = textBeforeCaretOnLine(node, sel.anchor.offset);
         const m = /(^|\s)@([^\s@]*)$/.exec(before);
         const s = /^\/([^\s/]*)$/.exec(before);
+        const active = Boolean(m) || Boolean(s);
+        // Only pay for the DOM read when a trigger is live; otherwise the rect
+        // is unused. Viewport coords (position:fixed portal) — no scroll add.
+        const anchorRect = active ? readCaretRect(editor.getRootElement()) : null;
         onTriggerRef.current({
           mention: m ? { q: m[2] ?? '' } : null,
           slash: s ? { q: s[1] ?? '' } : null,
+          anchorRect,
         });
       });
     });
@@ -383,6 +473,7 @@ export const LexicalComposerInput = forwardRef<
     onPasteFiles,
     popoverOpen,
     onPopoverKey,
+    comboboxAria,
     draft,
   } = props;
   const editorRef = useRef<LexicalEditor | null>(null);
@@ -487,6 +578,12 @@ export const LexicalComposerInput = forwardRef<
               data-testid="chat-composer-input"
               className="ph-no-capture composer-editable"
               aria-placeholder={placeholder}
+              role="combobox"
+              aria-expanded={comboboxAria?.expanded ? 'true' : 'false'}
+              aria-controls="mention-listbox"
+              {...(comboboxAria?.activeId
+                ? { 'aria-activedescendant': comboboxAria.activeId }
+                : {})}
               placeholder={
                 <div className="composer-input-placeholder">{placeholder}</div>
               }

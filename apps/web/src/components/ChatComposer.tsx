@@ -51,7 +51,9 @@ import {
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
+  type CaretRect,
 } from './composer/LexicalComposerInput';
+import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -248,6 +250,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // Lexical owns the caret, so the mention/slash trigger state only carries
     // the typed query — no cursor offset.
     const [mention, setMention] = useState<{ q: string } | null>(null);
+    // Active-row index for the @-popover's flat "all-tab" union (plugins →
+    // skills → mcp → connectors → files). Resets to 0 whenever the query
+    // identity changes; drives the visual highlight + Enter/Tab target.
+    const [mentionIndex, setMentionIndex] = useState(0);
+    // Viewport caret box the floating popover anchors against. Sampled by the
+    // editor at trigger-detection time; null when no trigger is live.
+    const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
     // Slash-command popover state — when the draft starts with `/` and the
     // cursor is still inside that token (no space committed yet), we show a
     // small palette of supported commands. The query is the text after `/`
@@ -1037,11 +1046,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function handleEditorTrigger({
       mention: nextMention,
       slash: nextSlash,
+      anchorRect,
     }: {
       mention: { q: string } | null;
       slash: { q: string } | null;
+      anchorRect: CaretRect | null;
     }) {
-      setMention(nextMention);
+      setCaretRect(anchorRect);
+      setMention((prev) => {
+        // Reset the active row only when the query identity changes (mirror of
+        // the slash reset) so re-renders from unrelated state don't snap it.
+        if (nextMention && (!prev || prev.q !== nextMention.q)) setMentionIndex(0);
+        return nextMention;
+      });
       if (nextSlash) {
         setSlash(nextSlash);
         setSlashIndex(0);
@@ -1082,7 +1099,61 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         setMention(null);
         return true;
       }
+      if (mention) {
+        // Drive a single index over the flat "all-tab" union length; the
+        // MentionPopover renders the same section order and highlights the
+        // matching row from activeIndex.
+        const total =
+          filteredPlugins.length +
+          filteredSkills.length +
+          filteredMcpServers.length +
+          filteredConnectors.length +
+          filteredFiles.length;
+        if (total > 0) {
+          if (key === 'ArrowDown') {
+            setMentionIndex((i) => (i + 1) % total);
+            return true;
+          }
+          if (key === 'ArrowUp') {
+            setMentionIndex((i) => (i - 1 + total) % total);
+            return true;
+          }
+          if (key === 'Tab' || key === 'Enter') {
+            pickMentionByFlatIndex(Math.min(mentionIndex, total - 1));
+            return true;
+          }
+        }
+      }
       return false;
+    }
+
+    // Resolve a flat "all-tab" index to the right insert call. Section order
+    // MUST match MentionPopover's render order (plugins→skills→mcp→connectors
+    // →files); the activeIndex highlight and Enter target stay in lockstep.
+    function pickMentionByFlatIndex(flat: number) {
+      let i = flat;
+      if (i < filteredPlugins.length) {
+        void insertPluginMention(filteredPlugins[i]!);
+        return;
+      }
+      i -= filteredPlugins.length;
+      if (i < filteredSkills.length) {
+        void insertSkillMention(filteredSkills[i]!);
+        return;
+      }
+      i -= filteredSkills.length;
+      if (i < filteredMcpServers.length) {
+        insertMcpMention(filteredMcpServers[i]!);
+        return;
+      }
+      i -= filteredMcpServers.length;
+      if (i < filteredConnectors.length) {
+        insertConnectorMention(filteredConnectors[i]!);
+        return;
+      }
+      i -= filteredConnectors.length;
+      const f = filteredFiles[i];
+      if (f) insertMention(f.path ?? f.name);
     }
 
     function insertMention(filePath: string) {
@@ -1413,33 +1484,41 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onPasteFiles={handlePasteFiles}
               popoverOpen={Boolean(mention) || Boolean(slash && filteredSlash.length > 0)}
               onPopoverKey={handlePopoverKey}
+              comboboxAria={{
+                expanded: Boolean(mention),
+                activeId: mention ? `mention-opt-${mentionIndex}` : null,
+              }}
             />
-            {mention ? (
-              <MentionPopover
-                files={filteredFiles}
-                plugins={filteredPlugins}
-                skills={filteredSkills}
-                mcpServers={filteredMcpServers}
-                connectors={filteredConnectors}
-                query={mention.q}
-                currentSkillId={currentSkillId}
-                onPickFile={insertMention}
-                onPickPlugin={(record) => void insertPluginMention(record)}
-                onPickSkill={(skill) => void insertSkillMention(skill)}
-                onPickMcp={insertMcpMention}
-                onPickConnector={insertConnectorMention}
-              />
-            ) : null}
-            {slash && filteredSlash.length > 0 ? (
-              <SlashPopover
-                commands={filteredSlash}
-                activeIndex={Math.min(slashIndex, filteredSlash.length - 1)}
-                onPick={pickSlash}
-                onHover={(i) => setSlashIndex(i)}
-                t={t}
-              />
-            ) : null}
           </div>
+          <CaretFloatingLayer caret={caretRect} open={Boolean(mention)}>
+            <MentionPopover
+              files={filteredFiles}
+              plugins={filteredPlugins}
+              skills={filteredSkills}
+              mcpServers={filteredMcpServers}
+              connectors={filteredConnectors}
+              query={mention?.q ?? ''}
+              activeIndex={mentionIndex}
+              currentSkillId={currentSkillId}
+              onPickFile={insertMention}
+              onPickPlugin={(record) => void insertPluginMention(record)}
+              onPickSkill={(skill) => void insertSkillMention(skill)}
+              onPickMcp={insertMcpMention}
+              onPickConnector={insertConnectorMention}
+            />
+          </CaretFloatingLayer>
+          <CaretFloatingLayer
+            caret={caretRect}
+            open={Boolean(slash && filteredSlash.length > 0)}
+          >
+            <SlashPopover
+              commands={filteredSlash}
+              activeIndex={Math.min(slashIndex, filteredSlash.length - 1)}
+              onPick={pickSlash}
+              onHover={(i) => setSlashIndex(i)}
+              t={t}
+            />
+          </CaretFloatingLayer>
           <div className="composer-row">
             <input
               ref={fileInputRef}
@@ -2424,6 +2503,7 @@ function SlashPopover({
         return (
           <button
             key={cmd.id}
+            id={`slash-opt-${idx}`}
             type="button"
             role="option"
             aria-selected={active}
@@ -2463,6 +2543,7 @@ function MentionPopover({
   skills,
   mcpServers,
   query,
+  activeIndex,
   currentSkillId,
   onPickFile,
   onPickPlugin,
@@ -2476,6 +2557,7 @@ function MentionPopover({
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
   query: string;
+  activeIndex: number;
   currentSkillId: string | null;
   onPickFile: (path: string) => void;
   onPickPlugin: (record: InstalledPluginRecord) => void;
@@ -2525,7 +2607,7 @@ function MentionPopover({
           </button>
         ))}
       </div>
-      <div className="mention-results" ref={ref}>
+      <div className="mention-results" ref={ref} role="listbox" id="mention-listbox">
         {!hasVisibleResults ? (
           <div className="mention-empty">
             {query ? (
@@ -2538,10 +2620,16 @@ function MentionPopover({
         {showPlugins && plugins.length > 0 ? (
         <>
           <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
-          {plugins.map((p) => (
+          {plugins.map((p, i) => {
+            const flat = i; // plugins are first
+            const active = flat === activeIndex;
+            return (
             <button
               key={`plugin-${p.id}`}
-              className="mention-item mention-item--plugin"
+              id={`mention-opt-${flat}`}
+              role="option"
+              aria-selected={active}
+              className={`mention-item mention-item--plugin${active ? ' is-active' : ''}`}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onPickPlugin(p)}
@@ -2556,31 +2644,36 @@ function MentionPopover({
               </span>
               <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
             </button>
-          ))}
+          );})}
         </>
       ) : null}
         {showSkills && skills.length > 0 ? (
           <>
             <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
-            {skills.map((skill) => {
-              const active = skill.id === currentSkillId;
+            {skills.map((skill, i) => {
+              const flat = plugins.length + i;
+              const rowActive = flat === activeIndex;
+              const isCurrent = skill.id === currentSkillId;
               return (
                 <button
                   key={`skill-${skill.id}`}
-                  className="mention-item"
+                  id={`mention-opt-${flat}`}
+                  role="option"
+                  aria-selected={rowActive}
+                  className={`mention-item${rowActive ? ' is-active' : ''}`}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onPickSkill(skill)}
                   title={localizeSkillDescription(locale, skill)}
                 >
-                  <Icon name={active ? 'check' : 'file'} size={12} />
+                  <Icon name={isCurrent ? 'check' : 'file'} size={12} />
                   <span className="mention-item-body">
                     <strong>{localizeSkillName(locale, skill)}</strong>
                     <span className="mention-meta mention-meta--desc">
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
+                  <span className="mention-meta">{isCurrent ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}
@@ -2589,10 +2682,16 @@ function MentionPopover({
         {showMcp && mcpServers.length > 0 ? (
           <>
             <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
-            {mcpServers.map((server) => (
+            {mcpServers.map((server, i) => {
+              const flat = plugins.length + skills.length + i;
+              const active = flat === activeIndex;
+              return (
               <button
                 key={`mcp-${server.id}`}
-                className="mention-item"
+                id={`mention-opt-${flat}`}
+                role="option"
+                aria-selected={active}
+                className={`mention-item${active ? ' is-active' : ''}`}
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickMcp(server)}
@@ -2607,16 +2706,22 @@ function MentionPopover({
                 </span>
                 <span className="mention-meta">{server.transport}</span>
               </button>
-            ))}
+            );})}
           </>
         ) : null}
         {showConnectors && connectors.length > 0 ? (
           <>
             <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
-            {connectors.map((connector) => (
+            {connectors.map((connector, i) => {
+              const flat = plugins.length + skills.length + mcpServers.length + i;
+              const active = flat === activeIndex;
+              return (
               <button
                 key={`connector-${connector.id}`}
-                className="mention-item"
+                id={`mention-opt-${flat}`}
+                role="option"
+                aria-selected={active}
+                className={`mention-item${active ? ' is-active' : ''}`}
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickConnector(connector)}
@@ -2631,18 +2736,28 @@ function MentionPopover({
                 </span>
                 <span className="mention-meta">{connector.accountLabel ?? connector.provider}</span>
               </button>
-            ))}
+            );})}
           </>
         ) : null}
         {showFiles && files.length > 0 ? (
         <>
           <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
-          {files.map((f) => {
+          {files.map((f, i) => {
             const key = f.path ?? f.name;
+            const flat =
+              plugins.length +
+              skills.length +
+              mcpServers.length +
+              connectors.length +
+              i;
+            const active = flat === activeIndex;
             return (
               <button
                 key={`file-${key}`}
-                className="mention-item"
+                id={`mention-opt-${flat}`}
+                role="option"
+                aria-selected={active}
+                className={`mention-item${active ? ' is-active' : ''}`}
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickFile(key)}
