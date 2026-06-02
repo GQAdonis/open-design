@@ -597,8 +597,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             >
               <button
                 type="button"
-                className="workspace-tab__main"
+                className="workspace-tab__main od-tooltip"
                 onClick={() => openTab(tab)}
+                title={display.title}
+                data-tooltip={display.title}
+                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
@@ -609,8 +612,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               </button>
               <button
                 type="button"
-                className="workspace-tab__close"
+                className="workspace-tab__close od-tooltip"
                 aria-label={t('common.close')}
+                title={t('common.close')}
+                data-tooltip={t('common.close')}
+                data-tooltip-placement="bottom"
                 onClick={() => closeTab(tab.id)}
               >
                 <Icon name="close" size={10} />
@@ -620,9 +626,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         })}
         <button
           type="button"
-          className="workspace-tabs-new-btn"
+          className="workspace-tabs-new-btn od-tooltip"
           onClick={createNewTab}
           title="New tab"
+          data-tooltip="New tab"
+          data-tooltip-placement="bottom"
           aria-label="New tab"
         >
           <Icon name="plus" size={14} />
@@ -631,9 +639,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       <div className="workspace-tabs-actions" ref={menuRef}>
         <button
           type="button"
-          className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
+          className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
           title="Search tabs"
+          data-tooltip="Search tabs"
+          data-tooltip-placement="bottom"
           aria-label="Search tabs"
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}

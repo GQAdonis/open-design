@@ -4807,9 +4807,11 @@ export function ProjectView({
           <>
             <button
               type="button"
-              className="settings-icon-btn"
+              className="settings-icon-btn od-tooltip"
               data-testid="project-settings-trigger"
               title={t('project.customInstructions')}
+              data-tooltip={t('project.customInstructions')}
+              data-tooltip-placement="bottom"
               aria-label={t('project.customInstructions')}
               aria-expanded={instructionsMode !== 'closed'}
               onClick={() => {

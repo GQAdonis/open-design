@@ -121,6 +121,27 @@ describe('preview comment persistence', () => {
     ]);
   });
 
+  it('lists preview comments in creation order even when older comments are updated later', () => {
+    const db = seededDb();
+    const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Created first',
+    });
+    const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-subtitle' }),
+      note: 'Created second',
+    });
+    if (!first || !second) throw new Error('comment upsert failed');
+
+    db.prepare(`UPDATE preview_comments SET created_at = ?, updated_at = ? WHERE id = ?`).run(10, 100, first.id);
+    db.prepare(`UPDATE preview_comments SET created_at = ?, updated_at = ? WHERE id = ?`).run(20, 20, second.id);
+
+    expect(listPreviewComments(db, 'project-1', 'conversation-1').map((comment) => comment.note)).toEqual([
+      'Created first',
+      'Created second',
+    ]);
+  });
+
   it('defaults attachments to an empty array when none are provided', () => {
     const db = seededDb();
     const saved = upsertPreviewComment(db, 'project-1', 'conversation-1', {

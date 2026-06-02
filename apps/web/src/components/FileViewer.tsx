@@ -484,12 +484,14 @@ function PreviewViewportControls({
     <div className="viewer-viewport-switcher" ref={menuRef}>
       <button
         type="button"
-        className="viewer-action viewer-viewport-trigger"
+        className="viewer-action viewer-viewport-trigger od-tooltip"
         aria-label={t('fileViewer.viewportAria')}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         title={t(activePreset.titleKey)}
+        data-tooltip={t(activePreset.titleKey)}
+        data-tooltip-placement="bottom"
         tabIndex={tabIndex}
         onClick={() => setOpen((value) => !value)}
       >
@@ -1183,11 +1185,12 @@ export function LiveArtifactViewer({
       ))(
         <div className="present-wrap chrome-present-wrap" ref={presentWrapRef}>
           <button
-            className="chrome-action chrome-action-secondary chrome-action-icon present-trigger"
+            className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
             aria-haspopup="menu"
             aria-expanded={presentMenuOpen}
             aria-label={t('fileViewer.present')}
             data-tooltip={t('fileViewer.present')}
+            data-tooltip-placement="bottom"
             title={t('fileViewer.present')}
             onClick={() => setPresentMenuOpen((v) => !v)}
           >
@@ -1224,13 +1227,15 @@ export function LiveArtifactViewer({
       ) : null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => setReloadKey((n) => n + 1)}
-            title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
-            aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
-          >
+            <button
+              type="button"
+              className="icon-only od-tooltip"
+              onClick={() => setReloadKey((n) => n + 1)}
+              title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+              data-tooltip={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+              data-tooltip-placement="bottom"
+              aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
+            >
             <Icon name="reload" size={14} />
           </button>
         </div>
@@ -1263,10 +1268,12 @@ export function LiveArtifactViewer({
             <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
               <button
                 type="button"
-                className="viewer-action zoom-trigger"
+                className="viewer-action zoom-trigger od-tooltip"
                 aria-haspopup="menu"
                 aria-expanded={zoomMenuOpen}
                 title={t('fileViewer.resetZoom')}
+                data-tooltip={t('fileViewer.resetZoom')}
+                data-tooltip-placement="bottom"
                 tabIndex={mode === 'preview' ? 0 : -1}
                 onClick={() => setZoomMenuOpen((v) => !v)}
               >
@@ -2117,6 +2124,10 @@ function commentActivityAt(comment: PreviewComment): number {
     Number.isFinite(comment.updatedAt) ? comment.updatedAt : 0,
     Number.isFinite(comment.createdAt) ? comment.createdAt : 0,
   );
+}
+
+function commentCreatedAt(comment: PreviewComment): number {
+  return Number.isFinite(comment.createdAt) ? comment.createdAt : commentActivityAt(comment);
 }
 
 function commentTargetIntersectsPreview(
@@ -6778,32 +6789,32 @@ function HtmlViewer({
       setImageExportBusy(false);
     }
   }
-  const activitySortedSideComments = useMemo(
+  const creationSortedSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
-      .sort((a, b) => commentActivityAt(b) - commentActivityAt(a)),
+      .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
     [file.name, previewComments],
   );
   useEffect(() => {
-    const activityIds = activitySortedSideComments.map((comment) => comment.id);
+    const creationIds = creationSortedSideComments.map((comment) => comment.id);
     setCommentOrderIds((current) => {
-      const visible = new Set(activityIds);
+      const visible = new Set(creationIds);
       const kept = current.filter((id) => visible.has(id));
-      const added = activityIds.filter((id) => !kept.includes(id));
-      const next = [...added, ...kept];
+      const added = creationIds.filter((id) => !kept.includes(id));
+      const next = [...kept, ...added];
       return next.join('\0') === current.join('\0') ? current : next;
     });
-  }, [activitySortedSideComments]);
+  }, [creationSortedSideComments]);
   const visibleSideComments = useMemo(() => {
-    if (commentOrderIds.length === 0) return activitySortedSideComments;
-    const byId = new Map(activitySortedSideComments.map((comment) => [comment.id, comment]));
+    if (commentOrderIds.length === 0) return creationSortedSideComments;
+    const byId = new Map(creationSortedSideComments.map((comment) => [comment.id, comment]));
     const ordered = commentOrderIds
       .map((id) => byId.get(id))
       .filter((comment): comment is PreviewComment => Boolean(comment));
     const orderedIds = new Set(ordered.map((comment) => comment.id));
-    const missing = activitySortedSideComments.filter((comment) => !orderedIds.has(comment.id));
+    const missing = creationSortedSideComments.filter((comment) => !orderedIds.has(comment.id));
     return [...ordered, ...missing];
-  }, [activitySortedSideComments, commentOrderIds]);
+  }, [creationSortedSideComments, commentOrderIds]);
   const activeSideCommentId = activePreviewCommentId;
   const activeCommentTargetVisible = commentTargetIntersectsPreview(
     activeCommentTarget,
@@ -7269,9 +7280,11 @@ function HtmlViewer({
             >
               <button
                 type="button"
-                className="icon-only"
+                className="icon-only od-tooltip"
                 onClick={() => postSlide('prev')}
                 title={t('fileViewer.previousSlide')}
+                data-tooltip={t('fileViewer.previousSlide')}
+                data-tooltip-placement="bottom"
                 aria-label={t('fileViewer.previousSlide')}
                 disabled={slideState !== null && slideState.active <= 0}
               >
@@ -7284,9 +7297,11 @@ function HtmlViewer({
               </span>
               <button
                 type="button"
-                className="icon-only"
+                className="icon-only od-tooltip"
                 onClick={() => postSlide('next')}
                 title={t('fileViewer.nextSlide')}
+                data-tooltip={t('fileViewer.nextSlide')}
+                data-tooltip-placement="bottom"
                 aria-label={t('fileViewer.nextSlide')}
                 disabled={
                   slideState !== null &&
@@ -7304,9 +7319,10 @@ function HtmlViewer({
               {mode === 'preview' ? (
                 <button
                   type="button"
-                  className="viewer-action viewer-action-icon"
+                  className="viewer-action viewer-action-icon od-tooltip"
                   data-testid="screenshot-copy-button"
                   data-tooltip={t('fileViewer.screenshot')}
+                  data-tooltip-placement="bottom"
                   title={t('fileViewer.screenshot')}
                   aria-label={t('fileViewer.screenshot')}
                   onClick={handleCopyScreenshot}
@@ -7317,9 +7333,10 @@ function HtmlViewer({
               <div className="artifact-tool-menu-anchor">
                 <button
                   type="button"
-                  className={`viewer-action viewer-action-icon viewer-comment-toggle${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
+                  className={`viewer-action viewer-action-icon viewer-comment-toggle od-tooltip${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
                   data-testid="board-mode-toggle"
                   data-tooltip={t('fileViewer.comment')}
+                  data-tooltip-placement="bottom"
                   title={t('fileViewer.comment')}
                   aria-label={t('fileViewer.comment')}
                   aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
@@ -7329,10 +7346,11 @@ function HtmlViewer({
                 </button>
               </div>
               <button
-                className={`viewer-action viewer-action-icon${drawOverlayOpen ? ' active' : ''}`}
+                className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
                 type="button"
                 data-testid="draw-overlay-toggle"
                 data-tooltip={t('fileViewer.mark')}
+                data-tooltip-placement="bottom"
                 title={t('fileViewer.mark')}
                 aria-label={t('fileViewer.mark')}
                 aria-pressed={drawOverlayOpen}
@@ -7342,10 +7360,11 @@ function HtmlViewer({
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
-                className={`viewer-action viewer-action-icon${manualEditMode ? ' active' : ''}`}
+                className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
                 type="button"
                 data-testid="manual-edit-mode-toggle"
                 data-tooltip={t('fileViewer.edit')}
+                data-tooltip-placement="bottom"
                 title={t('fileViewer.edit')}
                 aria-label={t('fileViewer.edit')}
                 aria-pressed={manualEditMode}
@@ -7356,9 +7375,10 @@ function HtmlViewer({
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 type="button"
-                className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle${boardMode && commentCreateMode ? ' active' : ''}`}
+                className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle od-tooltip${boardMode && commentCreateMode ? ' active' : ''}`}
                 data-testid="comment-panel-toggle"
                 data-tooltip={t('chat.tabComments')}
+                data-tooltip-placement="bottom"
                 title={t('chat.tabComments')}
                 aria-label={`${t('chat.tabComments')} (${visibleSideComments.length})`}
                 aria-pressed={boardMode && commentCreateMode}
@@ -7371,9 +7391,12 @@ function HtmlViewer({
                 <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
                   <button
                     type="button"
-                    className="viewer-action zoom-trigger"
+                    className="viewer-action zoom-trigger od-tooltip"
                     aria-haspopup="menu"
                     aria-expanded={zoomMenuOpen}
+                    title={t('fileViewer.resetZoom')}
+                    data-tooltip={t('fileViewer.resetZoom')}
+                    data-tooltip-placement="bottom"
                     onClick={() => {
                       fireArtifactToolbarClick('zoom_level_dropdown');
                       setZoomMenuOpen((v) => !v);
@@ -7441,11 +7464,12 @@ function HtmlViewer({
           {showPresent ? (
             <div className="present-wrap chrome-present-wrap">
               <button
-                className="chrome-action chrome-action-secondary chrome-action-icon present-trigger"
+                className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
                 aria-haspopup="menu"
                 aria-expanded={presentMenuOpen}
                 aria-label={t('fileViewer.present')}
                 data-tooltip={t('fileViewer.present')}
+                data-tooltip-placement="bottom"
                 title={t('fileViewer.present')}
                 onClick={() => {
                   fireArtifactHeaderClick('present_dropdown');
@@ -7477,11 +7501,14 @@ function HtmlViewer({
               <button
                 type="button"
                 className={
-                  'chrome-action chrome-action-primary chrome-action-export' +
+                  'chrome-action chrome-action-primary chrome-action-export od-tooltip' +
                   (exportReadyNudge ? ' export-ready-nudge' : '')
                 }
                 aria-haspopup="menu"
                 aria-expanded={shareMenuOpen}
+                title={t('fileViewer.shareLabel')}
+                data-tooltip={t('fileViewer.shareLabel')}
+                data-tooltip-placement="bottom"
                 onClick={openExportMenu}
               >
                 <Icon name="download" size={13} />

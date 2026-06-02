@@ -2684,15 +2684,15 @@ describe('FileViewer tweaks toolbar', () => {
         projectKind="prototype"
         file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
-        previewComments={[olderComment, newerComment]}
+        previewComments={[newerComment, olderComment]}
       />,
     );
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('1');
-    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('2');
+    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('1');
+    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('2');
 
     clickAgentTool('board-mode-toggle');
 
@@ -2727,11 +2727,11 @@ describe('FileViewer tweaks toolbar', () => {
       expect(activeItem?.className).toContain('active');
       expect(activeItem?.getAttribute('aria-current')).toBe('true');
     });
-    expect(screen.getByTestId('comment-active-pin').textContent).toBe('1');
+    expect(screen.getByTestId('comment-active-pin').textContent).toBe('2');
     expect(document.querySelector('[data-comment-id="comment-older"]')?.className).not.toContain('active');
   });
 
-  it('orders and timestamps side comments by latest update time', () => {
+  it('orders side comments by creation time while keeping activity timestamps', () => {
     const createdFirstUpdatedLast: PreviewComment = {
       id: 'comment-updated-last',
       projectId: 'project-1',

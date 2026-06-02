@@ -161,6 +161,7 @@ export interface LexicalComposerInputProps {
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
   comboboxAria?: { activeId: string | null; expanded: boolean };
+  title?: string;
   // Test hook for the contenteditable host. Defaults to the project
   // composer's id; HomeHero overrides it so its own tests/selectors keep
   // resolving the editor element after the textarea→Lexical migration.
@@ -489,6 +490,7 @@ export const LexicalComposerInput = forwardRef<
     onPopoverKey,
     comboboxAria,
     draft,
+    title,
     testId = 'chat-composer-input',
   } = props;
   const editorRef = useRef<LexicalEditor | null>(null);
@@ -593,6 +595,7 @@ export const LexicalComposerInput = forwardRef<
               data-testid={testId}
               className="ph-no-capture composer-editable"
               aria-placeholder={placeholder}
+              title={title ?? placeholder}
               role="combobox"
               aria-expanded={comboboxAria?.expanded ? 'true' : 'false'}
               aria-controls="mention-listbox"

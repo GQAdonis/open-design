@@ -448,8 +448,10 @@ export function HandoffButton({
       <div className="handoff-wrap handoff-wrap--solo" data-testid="handoff-wrap">
         <button
           type="button"
-          className="handoff-trigger handoff-trigger--solo"
+          className="handoff-trigger handoff-trigger--solo od-tooltip"
           title={t('handoff.fallbackTitle', { target: fallbackLabel })}
+          data-tooltip={t('handoff.fallbackTitle', { target: fallbackLabel })}
+          data-tooltip-placement="bottom"
           disabled={busy === fallbackId}
           onClick={() => {
             // The fallback opens the project folder in the OS file manager.
@@ -492,9 +494,11 @@ export function HandoffButton({
       <div className="handoff-split">
         <button
           type="button"
-          className="handoff-trigger"
+          className="handoff-trigger od-tooltip"
           data-testid="handoff-trigger"
           title={primaryTitle}
+          data-tooltip={primaryTitle}
+          data-tooltip-placement="bottom"
           aria-label={primaryTitle}
           onClick={() => {
             if (primary && busy !== primary.id) {
@@ -521,8 +525,11 @@ export function HandoffButton({
         </button>
         <button
           type="button"
-          className="handoff-caret"
+          className="handoff-caret od-tooltip"
           aria-label={t('handoff.chooseTargetAria')}
+          title={t('handoff.chooseTargetAria')}
+          data-tooltip={t('handoff.chooseTargetAria')}
+          data-tooltip-placement="bottom"
           data-testid="handoff-caret"
           onClick={() => setOpen((v) => !v)}
           disabled={busy !== null}

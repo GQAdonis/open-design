@@ -790,10 +790,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                       )}
                       <button
                         type="button"
-                        className="home-hero__active-clear"
+                        className="home-hero__active-clear od-tooltip"
                         onClick={() => removeFileChip(index, file)}
                         aria-label={t('chat.removeAria', { name: file.name })}
                         title={t('homeHero.removeFile')}
+                        data-tooltip={t('homeHero.removeFile')}
                       >
                         <Icon name="close" size={9} />
                       </button>
@@ -821,10 +822,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
                 <button
                   type="button"
-                  className="home-hero__active-clear"
+                  className="home-hero__active-clear od-tooltip"
                   onClick={() => onRemovePluginContext(plugin.id)}
                   aria-label={t('homeHero.removePluginAria', { title: plugin.title })}
                   title={t('homeHero.removePlugin')}
+                  data-tooltip={t('homeHero.removePlugin')}
                 >
                   <Icon name="close" size={9} />
                 </button>
@@ -844,10 +846,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <span className="home-hero__active-label">{label}</span>
                   <button
                     type="button"
-                    className="home-hero__active-clear"
+                    className="home-hero__active-clear od-tooltip"
                     onClick={() => onRemoveMcpContext(server.id)}
                     aria-label={t('chat.removeAria', { name: label })}
                     title={t('common.delete')}
+                    data-tooltip={t('common.delete')}
                   >
                     <Icon name="close" size={9} />
                   </button>
@@ -866,10 +869,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <span className="home-hero__active-label">{connector.name}</span>
                 <button
                   type="button"
-                  className="home-hero__active-clear"
+                  className="home-hero__active-clear od-tooltip"
                   onClick={() => onRemoveConnectorContext(connector.id)}
                   aria-label={t('chat.removeAria', { name: connector.name })}
                   title={t('common.delete')}
+                  data-tooltip={t('common.delete')}
                 >
                   <Icon name="close" size={9} />
                 </button>
@@ -900,10 +904,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 {activeCreateChip ? null : (
                   <button
                     type="button"
-                    className="home-hero__active-clear"
+                    className="home-hero__active-clear od-tooltip"
                     onClick={onClearActivePlugin}
                     aria-label={t('homeHero.clearActivePlugin')}
                     title={t('homeHero.clearActivePlugin')}
+                    data-tooltip={t('homeHero.clearActivePlugin')}
                   >
                     <Icon name="close" size={9} />
                   </button>
@@ -921,10 +926,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <span className="home-hero__active-label">{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
                 <button
                   type="button"
-                  className="home-hero__active-clear"
+                  className="home-hero__active-clear od-tooltip"
                   onClick={onClearActiveSkill}
                   aria-label={t('homeHero.clearActiveSkill')}
                   title={t('homeHero.clearActiveSkill')}
+                  data-tooltip={t('homeHero.clearActiveSkill')}
                 >
                   <Icon name="close" size={9} />
                 </button>
@@ -941,10 +947,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <span className="home-hero__active-label">{t('homeHero.promptExamples')}: {selectedPromptExample.label}</span>
                 <button
                   type="button"
-                  className="home-hero__active-clear"
+                  className="home-hero__active-clear od-tooltip"
                   onClick={clearSelectedPromptExample}
                   aria-label={t('common.close')}
                   title={t('common.close')}
+                  data-tooltip={t('common.close')}
                 >
                   <Icon name="close" size={9} />
                 </button>
@@ -959,6 +966,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               testId="home-hero-input"
               draft={prompt}
               placeholder={placeholder}
+              title={placeholder}
               knownEntities={promptMentionEntities}
               onChange={(plainText) => {
                 // A programmatic seed (host setPrompt → draft prop →
@@ -1122,7 +1130,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-left">
             <button
               type="button"
-              className={`home-hero__tool home-hero__context-trigger${pickerOpen ? ' is-active' : ''}`}
+              className={`home-hero__tool home-hero__context-trigger od-tooltip${pickerOpen ? ' is-active' : ''}`}
               data-testid="home-hero-context-trigger"
               onClick={() => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1135,6 +1143,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 editorRef.current?.replaceActiveTrigger('@');
               }}
               title={t('homeHero.contextSurfaces')}
+              data-tooltip={t('homeHero.contextSurfaces')}
               aria-label={t('homeHero.contextSurfaces')}
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
@@ -1146,7 +1155,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             </button>
             <button
               type="button"
-              className="home-hero__tool home-hero__attach"
+              className="home-hero__tool home-hero__attach od-tooltip"
               data-testid="home-hero-attach"
               onClick={() => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1157,6 +1166,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 fileInputRef.current?.click();
               }}
               title={t('chat.attachAria')}
+              data-tooltip={t('chat.attachAria')}
               aria-label={t('chat.attachAria')}
             >
               <Icon name="attach" size={15} />
@@ -1191,11 +1201,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
           <button
             type="button"
-            className="home-hero__submit"
+            className="home-hero__submit od-tooltip"
             data-testid="home-hero-submit"
             onClick={onSubmit}
             disabled={!canSubmit}
             title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+            data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
             aria-label={t('homeHero.run')}
           >
             <Icon name="send" size={13} />

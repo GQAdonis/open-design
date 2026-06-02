@@ -167,11 +167,13 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
     >
       <button
         type="button"
-        className={`session-mode-toggle__trigger${open ? ' is-open' : ''}`}
+        className={`session-mode-toggle__trigger od-tooltip${open ? ' is-open' : ''}`}
         disabled={disabledState}
         aria-label={active.title}
         aria-haspopup="menu"
         aria-expanded={open}
+        title={active.title}
+        data-tooltip={active.title}
         data-testid="session-mode-trigger"
         onClick={() => {
           if (open) {

@@ -23,6 +23,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
@@ -1593,6 +1594,7 @@ function AppInner() {
           onOpenProject={handleOpenProject}
         />
       )}
+      <TooltipLayer />
       {settingsOpen ? (
         <SettingsDialog
           initial={config}

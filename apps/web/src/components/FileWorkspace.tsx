@@ -1277,10 +1277,12 @@ export function FileWorkspace({
         {onFocusModeChange && focusMode ? (
           <button
             type="button"
-            className="icon-only ws-focus-expand"
+            className="icon-only ws-focus-expand od-tooltip"
             data-testid="workspace-focus-toggle"
             aria-pressed={focusMode}
             title={t('workspace.showChat')}
+            data-tooltip={t('workspace.showChat')}
+            data-tooltip-placement="bottom"
             aria-label={t('workspace.showChat')}
             onClick={() => onFocusModeChange(false)}
           >
@@ -1449,11 +1451,13 @@ export function FileWorkspace({
           <button
             ref={launcherBtnRef}
             type="button"
-            className="icon-only ws-tab-add"
+            className="icon-only ws-tab-add od-tooltip"
             data-testid="workspace-add-tab"
             aria-haspopup="dialog"
             aria-expanded={launcherOpen}
             title={t('workspace.newTab')}
+            data-tooltip={t('workspace.newTab')}
+            data-tooltip-placement="bottom"
             aria-label={t('workspace.newTab')}
             onClick={() => setLauncherOpen((v) => !v)}
           >
@@ -3168,12 +3172,15 @@ function Tab({
       {closable && onClose ? (
         <button
           type="button"
-          className="ws-tab-close"
+          className="ws-tab-close od-tooltip"
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
           title={t('workspace.closeTab')}
+          data-tooltip={t('workspace.closeTab')}
+          data-tooltip-placement="bottom"
+          aria-label={t('workspace.closeTab')}
         >
           <Icon name="close" size={11} />
         </button>

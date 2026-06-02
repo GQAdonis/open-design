@@ -1638,6 +1638,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ref={editorRef}
               draft={draft}
               placeholder={t('chat.composerPlaceholder')}
+              title={t('chat.composerPlaceholder')}
               knownEntities={composerMentionEntities}
               onChange={handleEditorChange}
               onTrigger={handleEditorTrigger}
@@ -1702,7 +1703,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               <button
                 ref={toolsTriggerRef}
                 type="button"
-                className={`icon-btn composer-tools-trigger${toolsOpen ? ' active' : ''}`}
+                className={`icon-btn composer-tools-trigger od-tooltip${toolsOpen ? ' active' : ''}`}
                 onClick={() => {
                   setToolsOpen((v) => {
                     const next = !v;
@@ -1721,6 +1722,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   });
                 }}
                 title={t('chat.cliSettingsTitle')}
+                data-tooltip={t('chat.cliSettingsTitle')}
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
                 aria-label={t('chat.cliSettingsAria')}
@@ -1857,7 +1859,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ) : null}
             </div>
             <button
-              className="icon-btn"
+              type="button"
+              className="icon-btn od-tooltip"
               data-testid="chat-attach"
               onClick={() => {
                 trackChatPanelClick(analytics.track, {
@@ -1868,6 +1871,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 fileInputRef.current?.click();
               }}
               title={t('chat.attachTitle')}
+              data-tooltip={t('chat.attachTitle')}
               disabled={uploading}
               aria-label={t('chat.attachAria')}
             >
@@ -1886,8 +1890,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {showStopButton ? (
               <button
                 type="button"
-                className="composer-send stop"
+                className="composer-send stop od-tooltip"
                 onClick={onStop}
+                title={t('chat.stop')}
+                data-tooltip={t('chat.stop')}
+                aria-label={t('chat.stop')}
               >
                 <Icon name="stop" size={13} />
                 <span>{t('chat.stop')}</span>
@@ -1896,7 +1903,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {showSendButton ? (
               <button
                 type="button"
-                className="composer-send"
+                className="composer-send od-tooltip"
                 data-testid="chat-send"
                 onClick={() => {
                   trackChatPanelClick(analytics.track, {
@@ -1909,6 +1916,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 disabled={sendDisabled || !hasComposerPayload}
                 aria-label={t('chat.send')}
                 title={t('chat.send')}
+                data-tooltip={t('chat.send')}
               >
                 <Icon name="send" size={13} />
                 <span>{t('chat.send')}</span>

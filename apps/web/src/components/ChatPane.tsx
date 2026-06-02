@@ -1015,9 +1015,11 @@ export function ChatPane({
               {activeConversation && onRenameConversation ? (
                 <button
                   type="button"
-                  className="chat-active-conversation-rename"
+                  className="chat-active-conversation-rename od-tooltip"
                   aria-label={activeConversationRenameLabel}
                   title={t('common.rename')}
+                  data-tooltip={t('common.rename')}
+                  data-tooltip-placement="bottom"
                   onClick={beginActiveTitleRename}
                 >
                   <Icon name="pencil" size={13} />
@@ -1033,13 +1035,15 @@ export function ChatPane({
           >
             <button
               type="button"
-              className="icon-only"
+              className="icon-only od-tooltip"
               data-testid="conversation-history-trigger"
               title={
                 activeConversation?.title
                   ? `${t('chat.conversationsTitle')} · ${activeConversation.title}`
                   : t('chat.conversationsTitle')
               }
+              data-tooltip={t('chat.conversationsTitle')}
+              data-tooltip-placement="bottom"
               aria-label={t('chat.conversationsAria')}
               aria-haspopup="menu"
               aria-expanded={showConvList}
@@ -1068,9 +1072,11 @@ export function ChatPane({
                   {onNewConversation ? (
                     <button
                       type="button"
-                      className="chat-history-new"
+                      className="chat-history-new od-tooltip"
                       data-testid="conversation-history-new"
                       disabled={newConversationDisabled}
+                      title={t('chat.newConversation')}
+                      data-tooltip={t('chat.newConversation')}
                       onClick={() => {
                         if (newConversationDisabled) return;
                         onNewConversation();
@@ -1095,8 +1101,10 @@ export function ChatPane({
                   {conversationSearch ? (
                     <button
                       type="button"
-                      className="chat-history-search-clear"
+                      className="chat-history-search-clear od-tooltip"
                       aria-label={t('pluginsHome.clearSearch')}
+                      title={t('pluginsHome.clearSearch')}
+                      data-tooltip={t('pluginsHome.clearSearch')}
                       onClick={() => setConversationSearch('')}
                     >
                       <Icon name="close" size={11} />
@@ -1121,9 +1129,11 @@ export function ChatPane({
           </div>
           <button
             type="button"
-            className="icon-only"
+            className="icon-only od-tooltip"
             data-testid="new-conversation"
             title={t('chat.newConversationsTitle')}
+            data-tooltip={t('chat.newConversationsTitle')}
+            data-tooltip-placement="bottom"
             aria-label={t('chat.newConversation')}
             onClick={() => {
               if (!onNewConversation || newConversationDisabled) return;
@@ -1141,9 +1151,11 @@ export function ChatPane({
           {onCollapse ? (
             <button
               type="button"
-              className="icon-only"
+              className="icon-only od-tooltip"
               data-testid="chat-collapse"
               title={t('workspace.focusMode')}
+              data-tooltip={t('workspace.focusMode')}
+              data-tooltip-placement="bottom"
               aria-label={t('workspace.focusMode')}
               onClick={() => {
                 trackChatPanelClick(analytics.track, {

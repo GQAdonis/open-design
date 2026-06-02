@@ -640,39 +640,45 @@ function injectManualEditBridge(doc: string): string {
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* DOMParser failed; fall through to string path */ }
-  }
-  // String fallback: find the real </head> (last one before <body>)
-  // to skip </head> literals inside <script>/<style> in <head>.
+  // String-first: a plain splice before the real </head> (or after <head…>) is
+  // correct for well-formed documents and avoids a full DOMParser parse +
+  // re-serialize. Every bridge calls this, so the parse path was the dominant
+  // srcdoc-build cost; DOMParser is now only the fallback for head-less
+  // fragments where we can't locate an insertion point textually. Find the real
+  // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
   const lower = doc.toLowerCase();
   const bodyStart = lower.indexOf('<body');
   const limit = bodyStart >= 0 ? bodyStart : lower.length;
   const idx = lower.lastIndexOf('</head>', limit - 1);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to prepend */ }
+  }
   return payload + doc;
 }
 
 function injectBeforeBodyEnd(doc: string, payload: string): string {
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* DOMParser failed; fall through to string path */ }
-  }
-  // String fallback: find the real </body> (last one before </html>)
-  // to skip </body> literals inside <script>/<style> in <body>.
+  // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
+  // before </html>) to skip </body> literals inside <script>/<style>.
   const lower = doc.toLowerCase();
   const htmlEnd = lower.lastIndexOf('</html>');
   const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
   const idx = lower.lastIndexOf('</body>', limit - 1);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+  // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to append */ }
+  }
   return doc + payload;
 }
 
