@@ -184,10 +184,6 @@ function ProjectViewHarness({ initialProject }: { initialProject: Project }) {
 
 const SAVED = 'Always use tabs, never spaces.';
 
-async function openProjectInstructionsFromSettings() {
-  fireEvent.click(await screen.findByTestId('project-settings-trigger'));
-}
-
 describe('ProjectView – saved Project instructions surface (#1822)', () => {
   beforeEach(() => {
     mockedListConversations.mockResolvedValue([conversation]);
@@ -237,32 +233,37 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
     expect(textarea.value).toBe(SAVED);
   });
 
-  it('offers an add affordance and opens an empty editor when no instructions are saved', async () => {
+  it('surfaces no instructions chip or editor when none are saved', async () => {
     render(<ProjectViewHarness initialProject={baseProject} />);
 
-    expect(await screen.findByTestId('project-settings-trigger')).toBeTruthy();
+    // Empty state has no entry point: the saved-state chip only appears once a
+    // value exists, and the standalone "add" affordance was retired when the
+    // header gear became CLI settings (aligns with main #3447, which dropped the
+    // project custom-instructions chrome entirely).
+    expect(await screen.findByTestId('project-title')).toBeTruthy();
     expect(screen.queryByTestId('project-instructions-chip')).toBeNull();
-
-    await openProjectInstructionsFromSettings();
-
-    const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
-    expect(textarea.value).toBe('');
+    expect(screen.queryByTestId('project-instructions-preview')).toBeNull();
+    expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
   });
 
-  it('reads the saved value back in the review panel right after a save', async () => {
-    mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: SAVED });
-    render(<ProjectViewHarness initialProject={baseProject} />);
+  it('saves an edited value from the review panel and reads it back', async () => {
+    const UPDATED = 'Prefer composition over inheritance.';
+    mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: UPDATED });
+    render(<ProjectViewHarness initialProject={{ ...baseProject, customInstructions: SAVED }} />);
 
-    await openProjectInstructionsFromSettings();
+    // Editing flows through the saved-state chip → review → edit, the only
+    // surviving entry point now that the empty-state add affordance is gone.
+    fireEvent.click(await screen.findByTestId('project-instructions-chip'));
+    fireEvent.click(screen.getByTestId('project-instructions-edit'));
     fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
-      target: { value: SAVED },
+      target: { value: UPDATED },
     });
     fireEvent.click(screen.getByTestId('project-instructions-save'));
 
-    expect(mockedPatchProject).toHaveBeenCalledWith('project-1', { customInstructions: SAVED });
+    expect(mockedPatchProject).toHaveBeenCalledWith('project-1', { customInstructions: UPDATED });
     // Save lands on the review panel so the stored value is confirmed back.
     await waitFor(() => {
-      expect(screen.getByTestId('project-instructions-preview').textContent).toBe(SAVED);
+      expect(screen.getByTestId('project-instructions-preview').textContent).toBe(UPDATED);
     });
     expect(screen.getByTestId('project-instructions-chip')).toBeTruthy();
   });
