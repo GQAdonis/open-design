@@ -134,6 +134,20 @@ describe('decideSafeRunRetry', () => {
     }
   });
 
+  it('allows at most one automatic same-run retry by default', () => {
+    expect(decide({ attemptCount: 0 })).toMatchObject({
+      shouldRetry: true,
+      retryAttemptIndex: 1,
+      retryMaxAttempts: DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS,
+    });
+    expect(decide({ attemptCount: 1 })).toMatchObject({
+      shouldRetry: false,
+      retryAttemptIndex: 2,
+      retryMaxAttempts: DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS,
+      retrySuppressedReason: 'attempt_limit_reached',
+    });
+  });
+
   it('stops at the configured attempt limit', () => {
     expect(decide({ attemptCount: 1, maxAttempts: 2 })).toMatchObject({
       shouldRetry: true,

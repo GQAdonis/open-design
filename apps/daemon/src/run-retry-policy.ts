@@ -7,7 +7,11 @@ import type {
   TrackingRunResult,
 } from '@open-design/contracts/analytics';
 
-export const DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS = 2;
+// Counts automatic same-run retry attempts, not the initial run. Issue #3543
+// scopes the first implementation to at most one automatic same-run retry, so
+// the default caps retries at a single attempt (attemptCount >= 1 suppresses
+// with attempt_limit_reached).
+export const DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS = 1;
 export const SAFE_RUN_RETRY_STRATEGY: TrackingRunRetryStrategy = 'same_run_transient';
 
 export interface RunRetryFailureSignal {
