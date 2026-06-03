@@ -475,20 +475,6 @@ export function AvatarMenu({
 
           <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
 
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <RemixIcon name="settings-line" size={15} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
-          </button>
 
           {onBack ? (
             <>
