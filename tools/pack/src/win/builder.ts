@@ -15,6 +15,7 @@ import {
 } from "../win-prebundle.js";
 import {
   buildCustomWinNsisInstaller,
+  hashWinNsisBasePayloadInputs,
   buildWinNsisBasePayload,
   buildWinNsisOverlayPayload,
   resolveWinNsisOverlayRequiredPaths,
@@ -529,6 +530,7 @@ export async function runElectronBuilder(
     const createNsisBasePayloadNode = (
       materialized: WinBuiltAppManifest | null,
       archiveSegments: WinPackTiming[],
+      basePayloadInputHash: string | null = null,
     ): CacheNode<{ createdAt: string; payloadPath: string; versionCore: string }> => ({
       build: async ({ entryRoot }) => {
         if (materialized == null) throw new Error("cannot build NSIS base payload without materialized unpacked app");
@@ -544,7 +546,8 @@ export async function runElectronBuilder(
       invalidate: async () => null,
       key: hashJson({
         archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
-        builderVersionScopeKey,
+        basePayloadInputHash,
+        builderVersionScopeKey: basePayloadInputHash == null ? builderVersionScopeKey : null,
         namespace: config.namespace,
         target: "nsis-payload-base",
         versionCore,
@@ -639,6 +642,9 @@ export async function runElectronBuilder(
       }
       return materializeCachedUnpackedForInstaller(paths, packagedVersion);
     });
+    const basePayloadInputHash = await runSegment("nsis-payload-base:input-hash", async () =>
+      hashWinNsisBasePayloadInputs(materialized)
+    );
     let signedUnpacked = false;
     const ensureSignedUnpacked = async (): Promise<void> => {
       if (!config.signed || signedUnpacked) return;
@@ -684,7 +690,7 @@ export async function runElectronBuilder(
       await runSegment("nsis-payload-base:cache", async () => {
         await cache.acquire({
           materialize: nsisBasePayloadMaterialize,
-          node: createNsisBasePayloadNode(materialized, basePayloadSegments),
+          node: createNsisBasePayloadNode(materialized, basePayloadSegments, basePayloadInputHash),
         });
       });
       segments.push(...basePayloadSegments);

@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
@@ -41,6 +42,34 @@ function normalizeArchivePath(relativePath: string): string {
 
 export function resolveWinNsisOverlayRequiredPaths(): string[][] {
   return WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => [relativePath]);
+}
+
+export async function hashWinNsisBasePayloadInputs(builtApp: WinBuiltAppManifest): Promise<string> {
+  const excluded = new Set(WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((entry) => entry.split("/").join("\\")));
+  const hash = createHash("sha256");
+
+  async function visit(current: string): Promise<void> {
+    const entries = await readdir(current, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const child = join(current, entry.name);
+      const relativePath = relative(builtApp.unpackedRoot, child).split("/").join("\\");
+      if (excluded.has(relativePath)) continue;
+      if (entry.isDirectory()) {
+        hash.update(`dir:${relativePath}\n`);
+        await visit(child);
+        continue;
+      }
+      if (entry.isFile()) {
+        hash.update(`file:${relativePath}\n`);
+        hash.update(await readFile(child));
+      }
+    }
+  }
+
+  hash.update("win-nsis-payload-base-inputs:v1\n");
+  await visit(builtApp.unpackedRoot);
+  return hash.digest("hex");
 }
 
 function createNsisLanguageInserts(): string {
