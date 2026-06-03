@@ -506,7 +506,30 @@ export function ChatPane({
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
   // but the same snapshot stays hidden across renders / streaming ticks.
-  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
+  // Persisted to sessionStorage so the dismissal survives tab switches and
+  // component remounts (the ChatPane key includes conversationId, so switching
+  // conversations unmounts and remounts the component). The stored value is the
+  // snapshot key, so a fresh TodoWrite snapshot still re-shows the card.
+  const dismissedStorageKey = `dismissedTodo:${activeConversationId ?? 'none'}`;
+  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(dismissedStorageKey);
+    } catch {
+      return null;
+    }
+  });
+  // Sync dismissed state when conversationId changes (e.g., tab switching).
+  // The parent key includes conversationId so unmount/remount resets this,
+  // but if conversationId changes without unmounting or the storage key
+  // changes, re-read to keep the dismissed state in sync.
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(dismissedStorageKey);
+      setDismissedPinnedTodoKey(stored);
+    } catch {
+      // sessionStorage access can fail in private browsing
+    }
+  }, [dismissedStorageKey]);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
@@ -1392,7 +1415,18 @@ export function ChatPane({
             messages={messages}
             streaming={streaming}
             dismissedKey={dismissedPinnedTodoKey}
-            onDismiss={setDismissedPinnedTodoKey}
+            onDismiss={(key) => {
+              setDismissedPinnedTodoKey(key);
+              try {
+                if (key) {
+                  sessionStorage.setItem(dismissedStorageKey, key);
+                } else {
+                  sessionStorage.removeItem(dismissedStorageKey);
+                }
+              } catch {
+                // sessionStorage access can fail in private browsing / sandboxed contexts
+              }
+            }}
             containerRef={pinnedTodoRef}
           />
           <QueuedSendStrip

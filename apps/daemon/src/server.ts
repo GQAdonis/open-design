@@ -5128,7 +5128,11 @@ export async function startServer({
   app.get(
     DIAGNOSTICS_EXPORT_PATH,
     requireLocalDaemonRequest,
-    createDiagnosticsExportHandler({ runtime, projectRoot: PROJECT_ROOT }),
+    createDiagnosticsExportHandler({
+      runtime,
+      projectRoot: PROJECT_ROOT,
+      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+    }),
   );
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -11952,7 +11956,11 @@ export async function startServer({
         return `tool_use:${name}`;
       }
       if (type === 'text_delta' || type === 'thinking_delta') {
-        const text = typeof payload.text === 'string' ? payload.text : '';
+        const text = typeof payload.delta === 'string'
+          ? payload.delta
+          : typeof payload.text === 'string'
+            ? payload.text
+            : '';
         return `${type}:${text.length} chars`;
       }
       return type;
