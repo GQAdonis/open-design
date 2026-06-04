@@ -30,9 +30,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
-import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
-import { PluginInputsForm } from './PluginInputsForm';
 import { useAnalytics } from '../analytics/provider';
 import { trackHomeChatComposerClick } from '../analytics/events';
 import {
@@ -115,9 +113,7 @@ interface Props {
   pluginInputValues?: Record<string, unknown>;
   pluginInputTemplate?: string | null;
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
-  onPluginInputValidityChange?: (valid: boolean) => void;
   inlineEditableInputNames?: string[];
-  showPluginInputsForm?: boolean;
   footerInputNames?: string[];
   designSystemOptions?: HomeHeroDesignSystemOption[];
   stagedFiles?: File[];
@@ -146,6 +142,7 @@ interface Props {
   onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  executionSwitcher?: ReactNode;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -224,11 +221,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onOpenPluginDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
-    pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
-    onPluginInputValidityChange = () => undefined,
-    inlineEditableInputNames = EMPTY_INPUT_NAMES,
-    showPluginInputsForm = true,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
     stagedFiles = EMPTY_STAGED_FILES,
@@ -257,6 +250,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
+    executionSwitcher,
   },
   ref,
 ) {
@@ -473,16 +467,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       .map((name) => fieldByName.get(name))
       .filter((field): field is InputFieldSpec => Boolean(field)),
     [fieldByName, footerInputNames],
-  );
-  // Inline `{{slot}}` editing in the prompt body is gone with the Lexical
-  // migration; every non-footer input now renders in the structured
-  // inputs form below the editor (matching the project composer), so the
-  // only fields we exclude are the ones promoted into the footer.
-  const remainingInputFields = useMemo(
-    () => pluginInputFields.filter(
-      (field) => !footerInputNameSet.has(field.name),
-    ),
-    [footerInputNameSet, pluginInputFields],
   );
   const activeCreateChip = useMemo(
     () => activeChipId
@@ -721,10 +705,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return false;
   }
 
-  function updatePluginInput(name: string, value: unknown) {
-    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
-  }
-
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
@@ -734,15 +714,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const nextPrompt = stripHomeMentionToken(prompt, file.name);
     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
     onRemoveFile(index);
-  }
-
-  function clearSelectedPromptExample() {
-    if (selectedPromptExample) {
-      onPromptChange('');
-      editorRef.current?.clear();
-      onExamplePromptStatusChange?.(null);
-    }
-    setSelectedPromptExample(null);
   }
 
   function usePromptExample(example: string) {
@@ -793,7 +764,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextItemCount > 0 ||
     (showActivePluginChip && activePluginTitle) ||
     activeSkillTitle ||
-    selectedPromptExample ||
     stagedFiles.length > 0;
 
   let optionRenderIndex = 0;
@@ -956,27 +926,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
               </span>
             ) : null}
-            {selectedPromptExample ? (
-              <span
-                className="home-hero__active-chip home-hero__active-chip--example"
-                data-testid="home-hero-active-example"
-              >
-                <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="pencil" size={12} />
-                </span>
-                <span className="home-hero__active-label">{t('homeHero.promptExamples')}: {selectedPromptExample.label}</span>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={clearSelectedPromptExample}
-                  aria-label={t('common.close')}
-                  title={t('common.close')}
-                  data-tooltip={t('common.close')}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </span>
-            ) : null}
             {contextOnlyPlugins.map((plugin) => (
               <span
                 key={`ctx-plugin-${plugin.id}`}
@@ -1089,14 +1038,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               }}
             />
           </div>
-          {showPluginInputsForm && remainingInputFields.length > 0 ? (
-            <PluginInputsForm
-              fields={remainingInputFields}
-              values={pluginInputValues}
-              onChange={onPluginInputValuesChange}
-              onValidityChange={onPluginInputValidityChange}
-            />
-          ) : null}
         </div>
         <CaretFloatingLayer caret={caretRect} open={pickerOpen}>
           <div
@@ -1434,11 +1375,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 ) : null}
               </div>
             ) : null}
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={onSessionModeChange}
-              disabled={Boolean(submitDisabled)}
-            />
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -1462,19 +1398,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="home-hero__submit od-tooltip"
-            data-testid="home-hero-submit"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            aria-label={t('homeHero.run')}
-          >
-            <Icon name="send" size={13} />
-            <span>{t('chat.send')}</span>
-          </button>
+          <div className="home-hero__foot-right">
+            <SessionModeToggle
+              mode={sessionMode}
+              onChange={onSessionModeChange}
+              disabled={Boolean(submitDisabled)}
+            />
+            {executionSwitcher ? (
+              <div className="home-hero__execution-switcher">
+                {executionSwitcher}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="home-hero__submit od-tooltip"
+              data-testid="home-hero-submit"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              aria-label={t('homeHero.run')}
+            >
+              <Icon name="send" size={13} />
+              <span>{t('chat.send')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
