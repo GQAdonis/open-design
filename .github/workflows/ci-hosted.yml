@@ -71,6 +71,15 @@ jobs:
         if: ${{ inputs.mode == matrix.mode || (inputs.mode == 'all' && matrix.mode != 'setup') }}
         uses: actions/checkout@v6.0.2
 
+      - name: Prepare package manager
+        if: ${{ inputs.mode == matrix.mode || (inputs.mode == 'all' && matrix.mode != 'setup') }}
+        run: |
+          set -euo pipefail
+          package_manager="$(node -p "require('./package.json').packageManager")"
+          corepack enable
+          corepack prepare "$package_manager" --activate
+          pnpm --version
+
       - name: Run CI script
         if: ${{ inputs.mode == matrix.mode || (inputs.mode == 'all' && matrix.mode != 'setup') }}
         env:
