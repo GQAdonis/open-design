@@ -53,6 +53,7 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
+  dataUrlToBlob,
   exportAsImage,
   exportAsJsx,
   exportAsMd,
@@ -63,6 +64,8 @@ import {
   exportReactComponentAsZip,
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
+  type PreviewSnapshot,
+  type PreviewSnapshotViewport,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -89,6 +92,7 @@ import { PaletteTweaks, type PaletteId } from './PaletteTweaks';
 import { PreviewDrawOverlay, type PreviewDrawMode } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
+  buildVisualAnnotationAttachment,
   commentsToAttachments,
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
@@ -99,6 +103,7 @@ import {
 import { applyPodMemberRemoval } from '../lib/pod-members';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import type {
+  ChatAttachment,
   ChatCommentAttachment,
   PreviewComment,
   PreviewCommentMember,
@@ -125,6 +130,68 @@ export type ManualEditPendingStyleSave = {
   styles: Partial<ManualEditStyles>;
   label: string;
   version: number;
+};
+type AnnotateStyleChangeMessage = {
+  type: 'od:annotate-style-change';
+  id: string;
+  property: string;
+  value: string;
+  label?: string;
+};
+type AnnotateTextChangeMessage = {
+  type: 'od:annotate-text-change';
+  id: string;
+  value: string;
+  label?: string;
+};
+type AnnotateImageChangeMessage = {
+  type: 'od:annotate-image-change';
+  id: string;
+  file: File;
+  alt?: string;
+  label?: string;
+};
+type AnnotateImageSrcChangeMessage = {
+  type: 'od:annotate-image-src-change';
+  id: string;
+  src: string;
+  alt?: string;
+  label?: string;
+};
+type AnnotateCaptureMessage = {
+  type: 'od:annotate-capture';
+  captureId?: string;
+  overlay?: AnnotateCaptureOverlay;
+};
+type AnnotateCaptureOverlay = {
+  html?: string;
+  css?: string;
+  scrollX?: number;
+  scrollY?: number;
+};
+type AnnotateChangeMessage =
+  | AnnotateStyleChangeMessage
+  | AnnotateTextChangeMessage
+  | AnnotateImageChangeMessage
+  | AnnotateImageSrcChangeMessage
+  | AnnotateCaptureMessage;
+type AnnotatePendingStyleSave = {
+  styles: Record<string, string>;
+  label: string;
+};
+type AnnotatePendingTextSave = {
+  value: string;
+  label: string;
+};
+type AnnotateCaptureStage = 'requested' | 'snapshotting' | 'uploading' | 'staged' | 'failed';
+type AnnotateCaptureJob = {
+  id: string;
+  stage: AnnotateCaptureStage;
+  error?: string;
+};
+type AnnotateCaptureOverlayRequest = {
+  reject: () => void;
+  resolve: (overlay: AnnotateCaptureOverlay | null) => void;
 };
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
 type PreviewCanvasSize = { width: number; height: number };
@@ -609,6 +676,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onStageBoardCapture?: (att: ChatAttachment) => void;
   onFileSaved?: () => Promise<void> | void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
@@ -629,6 +697,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onStageBoardCapture,
   onFileSaved,
   onOpenFileReplacing,
 }: Props) {
@@ -667,6 +736,7 @@ export function FileViewer({
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onStageBoardCapture={onStageBoardCapture}
         onFileSaved={onFileSaved}
       />
     );
@@ -3528,6 +3598,7 @@ function HtmlViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onStageBoardCapture,
   onFileSaved,
 }: {
   projectId: string;
@@ -3542,10 +3613,18 @@ function HtmlViewer({
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onStageBoardCapture?: (att: ChatAttachment) => void;
   onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
+  const annotateStrings = {
+    uploadImage: t('annotate.uploadImage'),
+    imageRef: t('annotate.imageRef'),
+    textRef: t('annotate.textRef'),
+    colorRef: t('annotate.colorRef'),
+    refOptions: t('annotate.refOptions'),
+  };
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
   // success immediately after the call returns; async exports get .then
@@ -3708,6 +3787,8 @@ function HtmlViewer({
   const [boardMode, setBoardMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
   const [inspectMode, setInspectMode] = useState(false);
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [annotateFrozenSource, setAnnotateFrozenSource] = useState<string | null>(null);
   const [palettePopoverOpen, setPalettePopoverOpen] = useState(false);
   const [selectedPalette, setSelectedPalette] = useState<PaletteId | null>(null);
   const [previewPalette, setPreviewPalette] = useState<PaletteId | null>(null);
@@ -3733,6 +3814,11 @@ function HtmlViewer({
       source === urlPreviewIframeRef.current?.contentWindow ||
       source === srcDocPreviewIframeRef.current?.contentWindow
     );
+  }, []);
+  const previewIframeForSource = useCallback((source: MessageEventSource | null): HTMLIFrameElement | null => {
+    if (!source) return null;
+    const candidates = [iframeRef.current, urlPreviewIframeRef.current, srcDocPreviewIframeRef.current];
+    return candidates.find((frame): frame is HTMLIFrameElement => !!frame && frame.contentWindow === source) ?? null;
   }, []);
   const previewScrollRestoreRef = useRef<{
     hostLeft: number;
@@ -3844,6 +3930,12 @@ function HtmlViewer({
   const manualEditSavingRef = useRef(false);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const annotatePendingStyleRef = useRef<Map<string, AnnotatePendingStyleSave>>(new Map());
+  const annotatePendingTextRef = useRef<Map<string, AnnotatePendingTextSave>>(new Map());
+  const annotateStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const annotateCaptureJobsRef = useRef<Map<string, AnnotateCaptureJob>>(new Map());
+  const annotateCaptureOverlayRef = useRef<AnnotateCaptureOverlay | null>(null);
+  const annotateCaptureOverlayRequestsRef = useRef<Map<string, AnnotateCaptureOverlayRequest>>(new Map());
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
   const sourceFileKeyRef = useRef<string | null>(null);
@@ -3888,6 +3980,7 @@ function HtmlViewer({
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
+  const [annotateCaptureToast, setAnnotateCaptureToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4103,9 +4196,20 @@ function HtmlViewer({
       setManualEditFrozenSource(livePreviewSource);
     }
   }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
+  useEffect(() => {
+    if (!annotateMode) {
+      setAnnotateFrozenSource(null);
+      return;
+    }
+    if (annotateFrozenSource === null && livePreviewSource != null) {
+      setAnnotateFrozenSource(livePreviewSource);
+    }
+  }, [annotateMode, annotateFrozenSource, livePreviewSource]);
   const previewSource = (manualEditMode && manualEditFrozenSource !== null)
     ? manualEditFrozenSource
-    : livePreviewSource;
+    : (annotateMode && annotateFrozenSource !== null)
+      ? annotateFrozenSource
+      : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
   const urlModeBridge = hasUrlModeBridge(source);
@@ -4134,11 +4238,16 @@ function HtmlViewer({
     editMode: manualEditMode,
     urlModeBridge,
     inspectMode,
+    annotateMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
+    screenshotCapture: true,
     tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
   });
+  const activeSrcDocPreviewIframe = useCallback((): HTMLIFrameElement | null => {
+    return srcDocPreviewIframeRef.current ?? (!useUrlLoadPreview ? iframeRef.current : null);
+  }, [useUrlLoadPreview]);
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
     [projectId, file.name, file.mtime, reloadKey],
@@ -4208,8 +4317,9 @@ function HtmlViewer({
       editBridge: manualEditMode,
       paletteBridge: true,
       initialPalette: selectedPalette,
+      annotateBridge: annotateMode,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette, annotateMode],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
@@ -4240,17 +4350,23 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
-  const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
+  const useLazySrcDocTransport = (useUrlLoadPreview || hasLazySrcDocTransport) && !annotateMode;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
-  const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
-    if (!canActivateSrcDocTransport({
+  const activateSrcDocTransport = useCallback((
+    target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current,
+    options?: { force?: boolean },
+  ) => {
+    const canActivate = options?.force
+      ? Boolean(srcDoc && useLazySrcDocTransport && srcDocShellReady && activatedSrcDocTransportHtmlRef.current !== srcDoc)
+      : canActivateSrcDocTransport({
       srcDoc,
       useUrlLoadPreview,
       useLazySrcDocTransport,
       shellReady: srcDocShellReady,
       activatedHtml: activatedSrcDocTransportHtmlRef.current,
-    })) return false;
+    });
+    if (!canActivate) return false;
     const win = target?.contentWindow;
     if (!win) return false;
     win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
@@ -4271,7 +4387,7 @@ function HtmlViewer({
   }, [activateSrcDocTransport, useUrlLoadPreview]);
   useEffect(() => {
     restorePreviewScrollPosition();
-  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+  }, [annotateMode, boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -4433,8 +4549,16 @@ function HtmlViewer({
     win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
     win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+    win.postMessage({ type: 'od:annotate-mode', enabled: annotateMode }, '*');
+    win.postMessage({ type: 'od:annotate-locale', strings: annotateStrings }, '*');
     const palette = previewPalette ?? selectedPalette;
     win.postMessage({ type: 'od:palette', palette }, '*');
+  }
+
+  function syncBridgeModesAfterTransport(target: HTMLIFrameElement | null = iframeRef.current) {
+    syncBridgeModes(target);
+    window.setTimeout(() => syncBridgeModes(target), 0);
+    window.setTimeout(() => syncBridgeModes(target), 160);
   }
   // Keep the ref pointing at the latest `syncBridgeModes` closure so the
   // render-mode-swap effect above (which can fire before this declaration in
@@ -4446,6 +4570,530 @@ function HtmlViewer({
     if (!win) return;
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc]);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:annotate-mode', enabled: annotateMode }, '*');
+    win.postMessage({ type: 'od:annotate-locale', strings: annotateStrings }, '*');
+  }, [annotateMode, srcDoc, annotateStrings.uploadImage]);
+
+  const annotateCaptureFailureMessage = '截图失败，请重试';
+  const annotateCaptureProgressMessage = '正在截图...';
+  const annotateCaptureSuccessMessage = '截图已加入 Chat';
+
+  const updateAnnotateCaptureJob = useCallback((
+    jobId: string,
+    stage: AnnotateCaptureStage,
+    error?: string,
+  ) => {
+    annotateCaptureJobsRef.current.set(jobId, { id: jobId, stage, error });
+    if (stage === 'failed') {
+      if (error) console.warn('[annotate] capture job failed:', jobId, error);
+      setAnnotateCaptureToast(annotateCaptureFailureMessage);
+    }
+  }, []);
+
+  const stageSnapshotForChat = useCallback(async (jobId: string, snap: PreviewSnapshot): Promise<boolean> => {
+    updateAnnotateCaptureJob(jobId, 'uploading');
+    if (!onStageBoardCapture || !projectId) {
+      updateAnnotateCaptureJob(jobId, 'failed', 'missing onStageBoardCapture or projectId');
+      return false;
+    }
+    try {
+      const mime = snap.mime ?? snap.blob?.type ?? snap.dataUrl?.match(/^data:([^;,]+)/)?.[1] ?? 'image/png';
+      const ext = mime.includes('svg') ? 'svg' : 'png';
+      const blob = snap.blob ?? (snap.dataUrl ? dataUrlToBlob(snap.dataUrl) : null);
+      if (!blob) {
+        updateAnnotateCaptureJob(jobId, 'failed', 'snapshot has no image payload');
+        return false;
+      }
+      const file = new File([blob], `screenshot-${Date.now()}.${ext}`, { type: mime });
+      const result = await uploadProjectFiles(projectId, [file]);
+      const uploaded = result.uploaded[0];
+      if (!uploaded?.path) {
+        updateAnnotateCaptureJob(jobId, 'failed', 'upload returned no file path');
+        return false;
+      }
+      onStageBoardCapture({ path: uploaded.path, name: uploaded.name, kind: 'image', size: uploaded.size });
+      updateAnnotateCaptureJob(jobId, 'staged');
+      return true;
+    } catch (err) {
+      console.warn('[annotate] screenshot stage failed:', err);
+      updateAnnotateCaptureJob(jobId, 'failed', err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  }, [onStageBoardCapture, projectId, updateAnnotateCaptureJob]);
+
+  const fallbackPreviewSnapshot = useCallback((
+    iframe: HTMLIFrameElement,
+    overlay: AnnotateCaptureOverlay | null,
+    sourceHtml?: string | null,
+    viewport?: PreviewSnapshotViewport | null,
+  ): PreviewSnapshot | null => {
+    const overlaySelector = '#oi-sel,#oi-hov,#oi-svg,#oi-card,.oi-badge,.oi-shot,.oi-shot-fly,#oi-cpk';
+    const rect = iframe.getBoundingClientRect();
+    const cropX = Math.max(0, Math.round(viewport?.x ?? 0));
+    const cropY = Math.max(0, Math.round(viewport?.y ?? 0));
+    const w = Math.max(1, Math.round((viewport?.w ?? rect.width) || 1024));
+    const h = Math.max(1, Math.round((viewport?.h ?? rect.height) || 768));
+    let frameScrollX = 0;
+    let frameScrollY = 0;
+    try {
+      frameScrollX = Number(iframe.contentWindow?.scrollX ?? 0);
+      frameScrollY = Number(iframe.contentWindow?.scrollY ?? 0);
+    } catch {
+      frameScrollX = 0;
+      frameScrollY = 0;
+    }
+    const sx = Math.max(0, Number(overlay?.scrollX ?? frameScrollX) + cropX);
+    const sy = Math.max(0, Number(overlay?.scrollY ?? frameScrollY) + cropY);
+    let docW = w;
+    let docH = h;
+    try {
+      const doc = iframe.contentDocument;
+      docW = Math.max(
+        w,
+        Math.ceil(doc?.documentElement?.scrollWidth ?? 0),
+        Math.ceil(doc?.body?.scrollWidth ?? 0),
+        Math.ceil(sx + w),
+      );
+      docH = Math.max(
+        h,
+        Math.ceil(doc?.documentElement?.scrollHeight ?? 0),
+        Math.ceil(doc?.body?.scrollHeight ?? 0),
+        Math.ceil(sy + h),
+      );
+    } catch {
+      docW = Math.max(w, Math.ceil(sx + w));
+      docH = Math.max(h, Math.ceil(sy + h));
+    }
+    const appendOverlayLayer = (root: Element, ownerDoc: Document) => {
+      if (!overlay?.html) return;
+      const head = root.querySelector('head') ?? root;
+      const body = root.querySelector('body') ?? root;
+      const overlayStyle = ownerDoc.createElement('style');
+      overlayStyle.textContent = `${overlay.css ?? ''}#od-snapshot-overlay-layer{position:absolute!important;left:0!important;top:0!important;width:${w + cropX}px!important;height:${h + cropY}px!important;overflow:hidden!important;pointer-events:none!important;background:transparent!important;z-index:2147483647!important;transform:translate(${sx - cropX}px,${sy - cropY}px)!important;transform-origin:0 0!important;}#od-snapshot-overlay-layer #oi-sel,#od-snapshot-overlay-layer #oi-hov,#od-snapshot-overlay-layer #oi-svg,#od-snapshot-overlay-layer #oi-card,#od-snapshot-overlay-layer .oi-badge,#od-snapshot-overlay-layer .oi-shot,#od-snapshot-overlay-layer .oi-shot-fly,#od-snapshot-overlay-layer #oi-cpk{display:block;}`;
+      head.appendChild(overlayStyle);
+      const layer = ownerDoc.createElement('div');
+      layer.id = 'od-snapshot-overlay-layer';
+      layer.innerHTML = overlay.html;
+      body.appendChild(layer);
+    };
+    let pageHtml = '';
+    try {
+      const liveRoot = iframe.contentDocument?.documentElement?.cloneNode(true);
+      if (
+        liveRoot &&
+        'querySelectorAll' in liveRoot &&
+        'setAttribute' in liveRoot
+      ) {
+        const liveElement = liveRoot as Element;
+        liveElement.querySelectorAll('script').forEach((node) => node.remove());
+        liveElement.querySelectorAll('base').forEach((node) => node.remove());
+        liveElement.querySelectorAll(overlaySelector).forEach((node) => node.remove());
+        const head = liveElement.querySelector('head') ?? liveElement;
+        const style = document.createElement('style');
+        style.textContent = `html{margin:0!important;width:${docW}px!important;min-height:${docH}px!important;overflow:hidden!important;}body{margin:0!important;width:${docW}px!important;min-height:${docH}px!important;transform:translate(${-sx}px,${-sy}px)!important;transform-origin:0 0!important;}*{content-visibility:visible!important;}`;
+        head.appendChild(style);
+        appendOverlayLayer(liveElement, document);
+        liveElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        pageHtml = new XMLSerializer().serializeToString(liveElement);
+      }
+    } catch {
+      pageHtml = '';
+    }
+    if (!pageHtml) {
+      const html = sourceHtml || iframe.getAttribute('srcdoc');
+      if (!html) return null;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('script').forEach((node) => node.remove());
+      doc.querySelectorAll('base').forEach((node) => node.remove());
+      doc.querySelectorAll(overlaySelector).forEach((node) => node.remove());
+      const style = doc.createElement('style');
+      style.textContent = `html{margin:0!important;width:${docW}px!important;min-height:${docH}px!important;overflow:hidden!important;}body{margin:0!important;width:${docW}px!important;min-height:${docH}px!important;transform:translate(${-sx}px,${-sy}px)!important;transform-origin:0 0!important;}*{content-visibility:visible!important;}`;
+      (doc.head || doc.documentElement).appendChild(style);
+      appendOverlayLayer(doc.documentElement, doc);
+      doc.documentElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      pageHtml = new XMLSerializer().serializeToString(doc.documentElement);
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><foreignObject x="0" y="0" width="${w}" height="${h}">${pageHtml}</foreignObject></svg>`;
+    return { blob: new Blob([svg], { type: 'image/svg+xml' }), mime: 'image/svg+xml', w, h };
+  }, []);
+
+  function sizeFromSvgText(svg: string, fallback: { w: number; h: number }): { w: number; h: number } {
+    const root = svg.match(/<svg\b[^>]*>/i)?.[0] ?? '';
+    const width = Number.parseFloat(root.match(/\bwidth=["']?([\d.]+)/i)?.[1] ?? '');
+    const height = Number.parseFloat(root.match(/\bheight=["']?([\d.]+)/i)?.[1] ?? '');
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+      return { w: width, h: height };
+    }
+    const viewBox = root.match(/\bviewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/i);
+    const vbWidth = Number.parseFloat(viewBox?.[1] ?? '');
+    const vbHeight = Number.parseFloat(viewBox?.[2] ?? '');
+    if (Number.isFinite(vbWidth) && vbWidth > 0 && Number.isFinite(vbHeight) && vbHeight > 0) {
+      return { w: vbWidth, h: vbHeight };
+    }
+    return fallback;
+  }
+
+  // Best-effort SVG → PNG via canvas. Try both data URLs and object URLs:
+  // browsers differ on which source can decode a foreignObject SVG reliably.
+  const tryConvertToPng = useCallback(async (snap: PreviewSnapshot): Promise<PreviewSnapshot> => {
+    const mime = snap.mime
+      ?? snap.blob?.type
+      ?? snap.dataUrl?.match(/^data:([^;,]+)/)?.[1];
+    if (!mime?.includes('svg')) return snap;
+    const blob = snap.blob ?? (snap.dataUrl ? dataUrlToBlob(snap.dataUrl) : null);
+    if (!blob) return snap;
+    const svgBlob = blob;
+    let svgText = '';
+    try {
+      svgText = await blob.text();
+    } catch {
+      svgText = '';
+    }
+    const intrinsic = sizeFromSvgText(svgText, { w: snap.w, h: snap.h });
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(intrinsic.w * dpr));
+    canvas.height = Math.max(1, Math.round(intrinsic.h * dpr));
+    const context = canvas.getContext('2d');
+    if (!context) return snap;
+    const ctx = context;
+    ctx.scale(dpr, dpr);
+
+    async function canvasToPng(): Promise<PreviewSnapshot | null> {
+      const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      return pngBlob ? { blob: pngBlob, mime: 'image/png', w: canvas.width, h: canvas.height } : null;
+    }
+
+    async function drawImageElement(source: string): Promise<PreviewSnapshot | null> {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        const timer = window.setTimeout(() => reject(new Error('img load timed out')), 5000);
+        el.onload = () => {
+          window.clearTimeout(timer);
+          resolve(el);
+        };
+        el.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error('img load failed'));
+        };
+        el.src = source;
+      });
+      ctx.clearRect(0, 0, intrinsic.w, intrinsic.h);
+      ctx.drawImage(img, 0, 0, intrinsic.w, intrinsic.h);
+      return canvasToPng();
+    }
+
+    async function drawImageBitmapFallback(): Promise<PreviewSnapshot | null> {
+      if (typeof createImageBitmap !== 'function') return null;
+      const bitmap = await createImageBitmap(svgBlob);
+      try {
+        ctx.clearRect(0, 0, intrinsic.w, intrinsic.h);
+        ctx.drawImage(bitmap, 0, 0, intrinsic.w, intrinsic.h);
+        return await canvasToPng();
+      } finally {
+        bitmap.close();
+      }
+    }
+
+    const sources: string[] = [];
+    if (snap.dataUrl?.startsWith('data:image/svg')) sources.push(snap.dataUrl);
+    if (svgText) {
+      sources.push(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`);
+    }
+    const objectUrl = URL.createObjectURL(svgBlob);
+    sources.push(objectUrl);
+    try {
+      for (const source of Array.from(new Set(sources))) {
+        try {
+          const png = await drawImageElement(source);
+          if (png) return png;
+        } catch {
+          // Try the next SVG transport.
+        }
+      }
+      try {
+        const png = await drawImageBitmapFallback();
+        if (png) return png;
+      } catch {
+        // Keep the original SVG fallback if browser rasterization is blocked.
+      }
+      return snap;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }, []);
+
+  function previewCaptureIframe(sourceWindow?: MessageEventSource | null): HTMLIFrameElement | null {
+    const sourceFrame = sourceWindow ? previewIframeForSource(sourceWindow) : null;
+    if (sourceFrame) return sourceFrame;
+    const preferredFrame = annotateMode
+      ? srcDocPreviewIframeRef.current
+      : (useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current);
+    if (preferredFrame?.contentWindow) return preferredFrame;
+    if (iframeRef.current?.contentWindow && iframeRef.current.dataset.odActive === 'true') {
+      return iframeRef.current;
+    }
+    const visibleFrame = [srcDocPreviewIframeRef.current, urlPreviewIframeRef.current].find((frame) => {
+      if (!frame?.contentWindow) return false;
+      const rect = frame.getBoundingClientRect();
+      const style = window.getComputedStyle(frame);
+      return rect.width > 1 &&
+        rect.height > 1 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0';
+    }) ?? null;
+    return visibleFrame
+      ?? preferredFrame
+      ?? srcDocPreviewIframeRef.current
+      ?? urlPreviewIframeRef.current;
+  }
+
+  function snapshotViewportForIframe(iframe: HTMLIFrameElement): PreviewSnapshotViewport | null {
+    const frameRect = iframe.getBoundingClientRect();
+    const frameClientWidth = iframe.clientWidth || frameRect.width;
+    const frameClientHeight = iframe.clientHeight || frameRect.height;
+    if (!frameRect.width || !frameRect.height || !frameClientWidth || !frameClientHeight) {
+      return null;
+    }
+    const hostRect = previewBodyRef.current?.getBoundingClientRect();
+    const windowRect = {
+      bottom: window.innerHeight || frameRect.bottom,
+      left: 0,
+      right: window.innerWidth || frameRect.right,
+      top: 0,
+    };
+    const clipLeft = Math.max(frameRect.left, hostRect?.left ?? frameRect.left, windowRect.left);
+    const clipTop = Math.max(frameRect.top, hostRect?.top ?? frameRect.top, windowRect.top);
+    const clipRight = Math.min(frameRect.right, hostRect?.right ?? frameRect.right, windowRect.right);
+    const clipBottom = Math.min(frameRect.bottom, hostRect?.bottom ?? frameRect.bottom, windowRect.bottom);
+    const visibleWidth = clipRight - clipLeft;
+    const visibleHeight = clipBottom - clipTop;
+    if (visibleWidth <= 1 || visibleHeight <= 1) {
+      return {
+        h: Math.max(1, Math.round(frameClientHeight)),
+        w: Math.max(1, Math.round(frameClientWidth)),
+        x: 0,
+        y: 0,
+      };
+    }
+    const scaleX = frameRect.width / frameClientWidth || 1;
+    const scaleY = frameRect.height / frameClientHeight || 1;
+    return {
+      h: Math.max(1, Math.round(visibleHeight / scaleY)),
+      w: Math.max(1, Math.round(visibleWidth / scaleX)),
+      x: Math.max(0, Math.round((clipLeft - frameRect.left) / scaleX)),
+      y: Math.max(0, Math.round((clipTop - frameRect.top) / scaleY)),
+    };
+  }
+
+  function postPreviewStateToCaptureFrame(target: HTMLIFrameElement | null) {
+    const win = target?.contentWindow;
+    if (!win) return;
+    const snapshot = previewScrollRestoreRef.current;
+    const scroll = snapshot ?? {
+      frameLeft: previewScrollPositionRef.current.frameLeft,
+      frameTop: previewScrollPositionRef.current.frameTop,
+      canvasLeft: previewScrollPositionRef.current.canvasLeft,
+      canvasTop: previewScrollPositionRef.current.canvasTop,
+    };
+    win.postMessage({
+      type: 'od:preview-scroll-restore',
+      frameLeft: scroll.frameLeft,
+      frameTop: scroll.frameTop,
+      canvasLeft: scroll.canvasLeft,
+      canvasTop: scroll.canvasTop,
+    }, '*');
+    win.postMessage({
+      type: '__dc_set_viewport',
+      ...dcViewportRef.current,
+    }, '*');
+    syncBridgeModesAfterTransport(target);
+  }
+
+  async function prepareCaptureIframe(
+    target: HTMLIFrameElement | null,
+    options?: { activateTransport?: boolean; syncViewport?: boolean },
+  ): Promise<boolean> {
+    const win = target?.contentWindow;
+    if (!target || !win) return false;
+    const activated = options?.activateTransport === false
+      ? false
+      : activateSrcDocTransport(target, { force: true });
+    if (activated) {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          target.removeEventListener('load', finish);
+          resolve();
+        };
+        target.addEventListener('load', finish, { once: true });
+        window.setTimeout(finish, 600);
+      });
+    }
+    if (options?.syncViewport !== false) {
+      postPreviewStateToCaptureFrame(target);
+    }
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve(null)));
+    return true;
+  }
+
+  const captureToChat = useCallback(async (
+    sourceWindow?: MessageEventSource | null,
+    options?: { overlay?: AnnotateCaptureOverlay | null; playAnimation?: boolean; cleanCapture?: boolean },
+  ) => {
+    const jobId = `annotate-capture-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setAnnotateCaptureToast(annotateCaptureProgressMessage);
+    updateAnnotateCaptureJob(jobId, 'requested');
+    const iframe = previewCaptureIframe(sourceWindow);
+    if (!iframe) {
+      updateAnnotateCaptureJob(jobId, 'failed', 'no preview iframe available');
+      return;
+    }
+
+    const win = iframe.contentWindow;
+    if (!win) {
+      updateAnnotateCaptureJob(jobId, 'failed', 'preview iframe has no contentWindow');
+      return;
+    }
+    updateAnnotateCaptureJob(jobId, 'snapshotting');
+    const isCapturingVisibleFrame = isActivePreviewIframeSource(win);
+    await prepareCaptureIframe(iframe, {
+      activateTransport: !isCapturingVisibleFrame,
+      syncViewport: !isCapturingVisibleFrame,
+    });
+    // cleanCapture=true (Screenshot button): capture the page content with no
+    // inspect/annotate UI chrome. Use the bridge with skipOverlay so the OI
+    // elements injected into the iframe DOM are excluded from the snapshot.
+    // The bridge runs inside the iframe (same-origin to itself) so it can
+    // always reach the content regardless of the daemon/web port difference.
+    // Ask the iframe bridge for a PNG. It still uses the same viewport snapshot
+    // structure internally, but rasterizes before sending the result back.
+    const cleanCapture = options?.cleanCapture ?? false;
+    const requestedOverlay = cleanCapture ? null : (options?.overlay ?? null);
+    const viewport = snapshotViewportForIframe(iframe);
+    const canUseSnapshotBridge = iframe.getAttribute('data-od-render-mode') !== 'url-load';
+    const snapshotPromise = canUseSnapshotBridge
+      ? Promise.race([
+        requestPreviewSnapshot(iframe, 5200, cleanCapture
+          ? { skipOverlay: true, viewport }
+          : { overlay: requestedOverlay, viewport }),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 5400)),
+      ])
+      : Promise.resolve(null);
+    if (options?.playAnimation !== false) {
+      win.postMessage({ type: 'od:annotate-trigger-animation' }, '*');
+    }
+    const overlayForFallback = cleanCapture
+      ? null
+      : (requestedOverlay ?? (annotateMode ? annotateCaptureOverlayRef.current : null));
+    const rawSnap = await snapshotPromise ?? fallbackPreviewSnapshot(iframe, overlayForFallback, srcDoc, viewport);
+    // If the bridge had to fall back to SVG, try one more rasterization pass in
+    // the host. If it still is not PNG, fail instead of staging a misleading SVG.
+    const snap = rawSnap ? await tryConvertToPng(rawSnap) : rawSnap;
+    win.postMessage({ type: 'od:annotate-capture-result', dataUrl: snap?.dataUrl ?? null }, '*');
+    if (!snap) {
+      updateAnnotateCaptureJob(jobId, 'failed', 'snapshot returned null');
+      return;
+    }
+    const staged = await stageSnapshotForChat(jobId, snap);
+    if (staged) setAnnotateCaptureToast(annotateCaptureSuccessMessage);
+  }, [activateSrcDocTransport, annotateMode, fallbackPreviewSnapshot, previewIframeForSource, srcDoc, stageSnapshotForChat, tryConvertToPng, updateAnnotateCaptureJob, useUrlLoadPreview]);
+
+  // Screenshot button captures the currently visible preview. Outside
+  // annotate mode this is clean page content; inside annotate mode it keeps
+  // the annotation UI the user can see.
+  const handleAnnotateCaptureClick = useCallback(() => {
+    if (annotateMode) {
+      const target = activeSrcDocPreviewIframe() ?? iframeRef.current;
+      void captureToChat(target?.contentWindow ?? null, {
+        cleanCapture: false,
+        playAnimation: false,
+      });
+      return;
+    }
+    void captureToChat(null, { playAnimation: false, cleanCapture: true });
+  }, [activeSrcDocPreviewIframe, annotateMode, captureToChat]);
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!annotateMode) return;
+      const data = ev.data as AnnotateChangeMessage | null;
+      if (data?.type === 'od:annotate-capture') {
+        if (data.captureId) {
+          const pending = annotateCaptureOverlayRequestsRef.current.get(data.captureId);
+          if (pending) {
+            pending.resolve(data.overlay ?? null);
+            return;
+          }
+        }
+        annotateCaptureOverlayRef.current = data.overlay ?? null;
+        void captureToChat(ev.source, { playAnimation: false });
+        return;
+      }
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (data?.type === 'od:annotate-style-change') {
+        queueAnnotateStyleSave(data);
+        return;
+      }
+      if (data?.type === 'od:annotate-text-change') {
+        queueAnnotateTextSave(data);
+        return;
+      }
+      if (data?.type === 'od:annotate-image-change') {
+        void saveAnnotateImageChange(data);
+        return;
+      }
+      if (data?.type === 'od:annotate-image-src-change') {
+        void saveAnnotateImageSrcChange(data);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [annotateMode, captureToChat, isOurPreviewIframeSource]);
+
+  useEffect(() => {
+    if (annotateMode) return;
+    void flushAnnotateStyleSave();
+  }, [annotateMode]);
+
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      const activeIframe = annotateMode
+        ? (activeSrcDocPreviewIframe() ?? iframeRef.current)
+        : (iframeRef.current ?? (useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current));
+      const win = activeIframe?.contentWindow;
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') {
+        if (!annotateMode || !win) return;
+        ev.preventDefault();
+        win.postMessage({ type: 'od:annotate-undo' }, '*');
+        return;
+      }
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'm') {
+        ev.preventDefault();
+        if (annotateMode && win) {
+          win.postMessage({ type: 'od:annotate-trigger-capture' }, '*');
+          return;
+        }
+        void captureToChat(null, { playAnimation: false, cleanCapture: true });
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [activeSrcDocPreviewIframe, annotateMode, captureToChat, useUrlLoadPreview]);
+
+  useEffect(() => () => {
+    if (annotateStyleTimerRef.current) clearTimeout(annotateStyleTimerRef.current);
+    annotateStyleTimerRef.current = null;
+    annotateCaptureOverlayRequestsRef.current.forEach((request) => request.reject());
+    annotateCaptureOverlayRequestsRef.current.clear();
+  }, []);
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -4989,6 +5637,109 @@ function HtmlViewer({
       setManualEditSaving(false);
       if (manualEditPendingStyleRef.current) scheduleManualEditStyleSave();
     }
+  }
+
+  function queueAnnotateStyleSave(change: AnnotateStyleChangeMessage) {
+    const id = change.id.trim();
+    const property = change.property.trim();
+    const value = change.value.trim();
+    if (!id || !property) return;
+    const current = annotatePendingStyleRef.current.get(id);
+    annotatePendingStyleRef.current.set(id, {
+      label: change.label?.trim() || '注释样式',
+      styles: { ...(current?.styles ?? {}), [property]: value },
+    });
+    scheduleAnnotateStyleSave();
+  }
+
+  function queueAnnotateTextSave(change: AnnotateTextChangeMessage) {
+    const id = change.id.trim();
+    if (!id) return;
+    annotatePendingTextRef.current.set(id, {
+      label: change.label?.trim() || '注释文本',
+      value: change.value,
+    });
+    scheduleAnnotateStyleSave();
+  }
+
+  async function saveAnnotateImageChange(change: AnnotateImageChangeMessage): Promise<boolean> {
+    const id = change.id.trim();
+    if (!id || !(change.file instanceof File)) return false;
+    if (manualEditSavingRef.current) {
+      window.setTimeout(() => void saveAnnotateImageChange(change), 250);
+      return false;
+    }
+    try {
+      const result = await uploadProjectFiles(projectId, [change.file]);
+      const uploaded = result.uploaded[0];
+      if (!uploaded?.path) {
+        console.error('[annotate] image upload failed:', result.error);
+        return false;
+      }
+      const src = toOwnerRelativePath(file.name, uploaded.path);
+      return applyManualEdit(
+        { id, kind: 'set-image', src, alt: change.alt ?? '' },
+        change.label?.trim() || '注释图片',
+      );
+    } catch (err) {
+      console.error('[annotate] image upload failed:', err);
+      return false;
+    }
+  }
+
+  async function saveAnnotateImageSrcChange(change: AnnotateImageSrcChangeMessage): Promise<boolean> {
+    const id = change.id.trim();
+    const src = change.src.trim();
+    if (!id) return false;
+    if (manualEditSavingRef.current) {
+      window.setTimeout(() => void saveAnnotateImageSrcChange(change), 250);
+      return false;
+    }
+    return applyManualEdit(
+      { id, kind: 'set-image', src, alt: change.alt ?? '' },
+      change.label?.trim() || '注释图片',
+    );
+  }
+
+  function scheduleAnnotateStyleSave() {
+    if (annotateStyleTimerRef.current) clearTimeout(annotateStyleTimerRef.current);
+    annotateStyleTimerRef.current = setTimeout(() => {
+      annotateStyleTimerRef.current = null;
+      void flushAnnotateStyleSave();
+    }, 700);
+  }
+
+  async function flushAnnotateStyleSave(): Promise<boolean> {
+    if (annotatePendingStyleRef.current.size === 0 && annotatePendingTextRef.current.size === 0) return true;
+    if (manualEditSavingRef.current) {
+      scheduleAnnotateStyleSave();
+      return false;
+    }
+    const styleEntries = Array.from(annotatePendingStyleRef.current.entries());
+    const textEntries = Array.from(annotatePendingTextRef.current.entries());
+    annotatePendingStyleRef.current.clear();
+    annotatePendingTextRef.current.clear();
+    for (const [id, pending] of styleEntries) {
+      const ok = await applyManualEdit(
+        { id, kind: 'set-style', styles: pending.styles as Partial<ManualEditStyles> },
+        pending.label,
+      );
+      if (!ok) {
+        console.error('[annotate] autosave failed for style edit:', id, pending.styles);
+        return false;
+      }
+    }
+    for (const [id, pending] of textEntries) {
+      const ok = await applyManualEdit(
+        { id, kind: 'set-text', value: pending.value },
+        pending.label,
+      );
+      if (!ok) {
+        console.error('[annotate] autosave failed for text edit:', id);
+        return false;
+      }
+    }
+    return true;
   }
 
   async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
@@ -5732,6 +6483,14 @@ function HtmlViewer({
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
 
+  async function reloadHtmlPreview() {
+    fireArtifactToolbarClick('reload');
+    await flushAnnotateStyleSave();
+    setAnnotateFrozenSource(null);
+    if (annotateMode) setAnnotateMode(false);
+    setReloadKey((n) => n + 1);
+  }
+
   return (
     <div className="viewer html-viewer">
       <div className="viewer-toolbar">
@@ -5740,8 +6499,7 @@ function HtmlViewer({
             type="button"
             className="icon-only"
             onClick={() => {
-              fireArtifactToolbarClick('reload');
-              setReloadKey((n) => n + 1);
+              void reloadHtmlPreview();
             }}
             title={t('fileViewer.reload')}
             aria-label={t('fileViewer.reloadAria')}
@@ -5957,6 +6715,7 @@ function HtmlViewer({
                     return;
                   }
                   const activateDraw = () => {
+                    setAnnotateMode(false);
                     setBoardMode(false);
                     clearBoardComposer();
                     setInspectMode(false);
@@ -5993,6 +6752,7 @@ function HtmlViewer({
                 return;
               }
               const activateComment = () => {
+                setAnnotateMode(false);
                 clearBoardComposer();
                 setInspectMode(false);
                 setDrawOverlayOpen(false);
@@ -6042,54 +6802,39 @@ function HtmlViewer({
             </>
           ) : null}
           <button
-            className={`viewer-action${inspectMode ? ' active' : ''}`}
+            className={`viewer-action${annotateMode ? ' active' : ''}`}
             type="button"
-            data-testid="inspect-mode-toggle"
-            title="Inspect"
-            aria-pressed={inspectMode}
+            data-testid="annotate-mode-toggle"
+            title="注释"
+            aria-pressed={annotateMode}
             onClick={() => {
-              fireArtifactToolbarClick('inspect');
-              setInspectMode((v) => {
+              capturePreviewScrollPosition();
+              setAnnotateMode((v) => {
                 const next = !v;
                 if (next) {
                   setBoardMode(false);
                   clearBoardComposer();
-                  setManualEditMode(false);
+                  setInspectMode(false);
                   setDrawOverlayOpen(false);
-                  setOpenHintBox(true);
+                  setManualEditMode(false);
                   setMode('preview');
                 }
                 return next;
               });
             }}
           >
-            <Icon name="tweaks" size={13} />
-            <span>Inspect</span>
+            <Icon name="eye" size={13} />
+            <span>注释</span>
           </button>
           <button
-            className={`viewer-action${manualEditMode ? ' active' : ''}`}
+            className="viewer-action annotate-capture-pill"
             type="button"
-            data-testid="manual-edit-mode-toggle"
-            title={t('fileViewer.edit')}
-            aria-pressed={manualEditMode}
-            onClick={() => {
-              fireArtifactToolbarClick('edit');
-              capturePreviewScrollPosition();
-              if (!manualEditMode) {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setDrawOverlayOpen(false);
-                setMode('preview');
-                setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
-                setManualEditMode(true);
-                return;
-              }
-              void exitManualEditModeAfterFlush();
-            }}
+            data-testid="annotate-capture-button"
+            title="截屏到 Chat"
+            onClick={handleAnnotateCaptureClick}
           >
-            <Icon name="edit" size={13} />
-            <span>{t('fileViewer.edit')}</span>
+            <Icon name="image" size={13} />
+            <span>截屏</span>
           </button>
         </div>
       </div>
@@ -6249,7 +6994,7 @@ function HtmlViewer({
                         if (!iframe) return;
                         const snap = await requestPreviewSnapshot(iframe);
                         try {
-                          if (snap) {
+                          if (snap?.dataUrl) {
                             exportAsImage(snap.dataUrl, exportTitle);
                           } else {
                             console.warn('[exportAsImage] snapshot capture returned null');
@@ -6410,6 +7155,7 @@ function HtmlViewer({
                       tabIndex={useUrlLoadPreview ? 0 : -1}
                       title={file.name}
                       sandbox="allow-scripts allow-downloads"
+                      allow="display-capture"
                       src={urlTransportSrc}
                       onLoad={() => {
                         const frame = urlPreviewIframeRef.current;
@@ -6419,7 +7165,7 @@ function HtmlViewer({
                           type: '__dc_set_viewport',
                           ...dcViewportRef.current,
                         }, '*');
-                        syncBridgeModes(frame);
+                        syncBridgeModesAfterTransport(frame);
                         if (useUrlLoadPreview) restorePreviewScrollPosition();
                       }}
                     />
@@ -6433,6 +7179,7 @@ function HtmlViewer({
                       tabIndex={useUrlLoadPreview ? -1 : 0}
                       title={file.name}
                       sandbox="allow-scripts allow-downloads"
+                      allow="display-capture"
                       srcDoc={srcDocTransportContent}
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
@@ -6454,7 +7201,7 @@ function HtmlViewer({
                           ...dcViewportRef.current,
                         }, '*');
                         replayInspectOverridesToIframe(frame);
-                        syncBridgeModes(frame);
+                        syncBridgeModesAfterTransport(frame);
                         if (!useUrlLoadPreview) restorePreviewScrollPosition();
                       }}
                     />
@@ -6496,6 +7243,16 @@ function HtmlViewer({
                   message={templateSavedToast}
                   ttlMs={2200}
                   onDismiss={() => setTemplateSavedToast(null)}
+                />
+              </div>
+            ) : null}
+            {annotateCaptureToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={annotateCaptureToast}
+                  ttlMs={2800}
+                  role="alert"
+                  onDismiss={() => setAnnotateCaptureToast(null)}
                 />
               </div>
             ) : null}

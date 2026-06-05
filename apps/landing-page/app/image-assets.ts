@@ -35,16 +35,19 @@ export function imageAssetSrcset(
     .join(', ');
 }
 
-export const heroImage = imageAsset('hero.png', { width: 1280, quality: 82 });
+// Homepage hero art. Served from `public/hero-home.png` (a local asset)
+// rather than the R2 CDN, so it ships straight from the site origin and
+// skips the Cloudflare image-resizing variants. Single intrinsic size —
+// the browser has only one candidate to pick from.
+export const heroImage = '/hero-home.png';
+export const labStageImage = '/lab-stage-bg.jpg';
 
 /**
- * Responsive srcset for the homepage hero. Widths cover phones (768),
- * laptops at 1x (1280), retina laptops (1920) and 4K / 2x retina (2560).
+ * srcset for the homepage hero. With a single local asset there are no
+ * responsive variants to choose between, so this points at the same file
+ * tagged with its intrinsic width.
  */
-export const heroImageSrcset = imageAssetSrcset(
-  'hero.png',
-  [768, 1280, 1920, 2560],
-);
+export const heroImageSrcset = `${heroImage} 2880w`;
 
 /**
  * Default Open Graph card image. Used by every page that doesn't supply

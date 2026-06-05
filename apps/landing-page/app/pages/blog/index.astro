@@ -21,7 +21,6 @@ import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
 import {
@@ -29,6 +28,7 @@ import {
   localizeBlogPostText,
 } from '../../content-i18n';
 import {
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -58,6 +58,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'blog',
     locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -150,7 +151,6 @@ const localizedPostField = (
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -323,6 +323,12 @@ const localizedPostField = (
       .blog-shell {
         position: relative;
         z-index: 2;
+        /* The sticky chrome (.site-chrome) is position:absolute and overlays
+         * the page, so the first content block must clear the topbar + nav —
+         * mirrors the 140px offset .sub-main uses on the other sub-pages.
+         * Without it the masthead title overlaps the logo (issue: header
+         * overlap on /blog). */
+        padding-top: 116px;
       }
       .blog-shell + .sub-footer {
         margin-top: 0;
@@ -652,6 +658,9 @@ const localizedPostField = (
         }
       }
       @media (max-width: 760px) {
+        .blog-shell {
+          padding-top: 98px;
+        }
         .blog-masthead {
           padding: 22px 0 18px;
         }

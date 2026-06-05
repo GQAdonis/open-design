@@ -1928,6 +1928,11 @@ export interface Dict {
   'manualEdit.uploadImageFailed': string;
   'manualEdit.focusSlides': string;
   'manualEdit.showPanels': string;
+  'annotate.uploadImage': string;
+  'annotate.imageRef': string;
+  'annotate.textRef': string;
+  'annotate.colorRef': string;
+  'annotate.refOptions': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;

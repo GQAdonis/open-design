@@ -348,7 +348,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(sourceMarkup).not.toContain('<img');
   });
 
-  it('URL-loads a plain HTML preview iframe instead of inlining via srcDoc', () => {
+  it('renders plain HTML previews through the srcdoc frame so screenshots can read the visible DOM', () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -368,19 +368,17 @@ describe('FileViewer SVG artifacts', () => {
       <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
     );
 
-    // Both iframes are always mounted (the lazy srcDoc transport avoids
-    // booting the artifact in the inactive frame). `data-od-active` and
-    // the testid pair identify which iframe is currently the user-facing
-    // one without unmounting either side.
+    // Both iframes stay mounted, but screenshot support makes srcdoc the
+    // user-facing frame so the capture bridge can read exactly what is shown.
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="url-load"');
-    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
-    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
+    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
+    expect(markup).toContain('src="about:blank"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
-  it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
+  it('keeps inactive URL transports mounted while the visible srcdoc boots the artifact', async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -410,13 +408,12 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(urlFrame).toBeTruthy();
     expect(srcDocFrame).toBeTruthy();
-    expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
-    expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
-    expect(srcDocFrame?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrame?.srcdoc).not.toContain('__odArtifactBootCount');
+    expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
+    expect(urlFrame?.getAttribute('src')).toBe('about:blank');
+    expect(srcDocFrame?.getAttribute('data-od-active')).toBe('true');
+    expect(srcDocFrame?.srcdoc).toContain('__odArtifactBootCount');
 
-    const postMessageSpy = vi.spyOn(srcDocFrame!.contentWindow!, 'postMessage');
-    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const urlFrameAfter = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
     const srcDocFrameAfter = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
@@ -426,17 +423,11 @@ describe('FileViewer SVG artifacts', () => {
     expect(urlFrameAfter?.getAttribute('data-od-active')).toBe('false');
     expect(urlFrameAfter?.getAttribute('src')).toBe('about:blank');
     expect(srcDocFrameAfter?.getAttribute('data-od-active')).toBe('true');
-    expect(srcDocFrameAfter?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrameAfter?.srcdoc).not.toContain('__odArtifactBootCount');
-
-    await waitFor(() => {
-      const activations = srcDocActivationMessages(postMessageSpy.mock.calls);
-      expect(activations.at(-1)?.html).toContain('__odArtifactBootCount');
-      expect(activations.at(-1)?.html).toContain('data-od-selection-bridge');
-    });
+    expect(srcDocFrameAfter?.srcdoc).toContain('__odArtifactBootCount');
+    expect(srcDocFrameAfter?.srcdoc).toContain('data-od-selection-bridge');
   });
 
-  it('reactivates the srcDoc transport after switching source back to preview', async () => {
+  it('keeps the srcdoc bridge after switching source back to preview', async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -452,7 +443,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const { container } = render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
@@ -461,7 +452,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -476,20 +467,16 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Preview' }));
 
     const remountedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    const postMessageSpy = vi.spyOn(remountedFrame.contentWindow!, 'postMessage');
 
     await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
     });
-    await waitFor(() => {
-      const activations = srcDocActivationMessages(postMessageSpy.mock.calls);
-      expect(activations.at(-1)?.html).toContain('data-od-selection-bridge');
-      expect(activations.at(-1)?.html).toContain('Hero');
-    });
+    expect(remountedFrame.srcdoc).toContain('data-od-selection-bridge');
+    expect(remountedFrame.srcdoc).toContain('Hero');
   });
 
-  it('uses the next file URL immediately when switching URL-loaded HTML previews', () => {
+  it('keeps switched HTML previews on srcdoc so screenshots use the visible frame', () => {
     const first = baseFile({
       name: 'first.html',
       path: 'first.html',
@@ -514,16 +501,16 @@ describe('FileViewer SVG artifacts', () => {
         entry: 'second.html',
       },
     };
-    const observedCommittedSrcs: Array<string | null> = [];
+    const observedCommittedModes: Array<string | null> = [];
 
     function Switcher() {
       const [file, setFile] = useState<ProjectFile>(first);
       const hostRef = useRef<HTMLDivElement | null>(null);
       useLayoutEffect(() => {
-        observedCommittedSrcs.push(
+        observedCommittedModes.push(
           hostRef.current
             ?.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]')
-            ?.getAttribute('src') ?? null,
+            ?.getAttribute('data-od-render-mode') ?? null,
         );
       });
       return (
@@ -539,17 +526,17 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+    expect(initialFrame?.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(initialFrame?.getAttribute('src')).toBeNull();
 
-    const observationsBeforeSwitch = observedCommittedSrcs.length;
+    const observationsBeforeSwitch = observedCommittedModes.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
 
     const nextFrame = getFrame();
     expect(nextFrame).toBe(initialFrame);
-    expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
-    );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0');
+    expect(observedCommittedModes[observationsBeforeSwitch]).toBe('srcdoc');
+    expect(nextFrame?.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(nextFrame?.getAttribute('src')).toBeNull();
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -578,7 +565,7 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       const frame = container.querySelector('.present-overlay iframe');
       expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
-      expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame?.getAttribute('data-od-render-mode')).toBe('srcdoc');
     });
   });
 
@@ -772,7 +759,7 @@ describe('FileViewer SVG artifacts', () => {
       expect(container.querySelector('.deck-nav')).toBeNull();
       expect(container.querySelector('.palette-tweaks-anchor')).toBeNull();
       expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
-      expect(screen.getByTestId('manual-edit-mode-toggle')).toBeTruthy();
+      expect(screen.queryByTestId('manual-edit-mode-toggle')).toBeNull();
       expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
       expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
       expect(screen.queryByRole('button', { name: /100%/ })).toBeNull();
@@ -1417,7 +1404,7 @@ describe('FileViewer tweaks toolbar', () => {
     });
   }
 
-  it('renders the toolbar Draw entry alongside restored Comment and Inspect entries', () => {
+  it('renders the toolbar Draw entry alongside restored Comment and annotation entries', () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -1426,8 +1413,10 @@ describe('FileViewer tweaks toolbar', () => {
 
     expect(screen.getByTestId('palette-tweaks-toggle')).toBeTruthy();
     expect(screen.getByTestId('board-mode-toggle')).toBeTruthy();
-    expect(screen.getByTestId('inspect-mode-toggle')).toBeTruthy();
+    expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
     expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
+    expect(screen.getByTestId('annotate-mode-toggle')).toBeTruthy();
+    expect(screen.getByTestId('annotate-capture-button')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
     expect(screen.queryByTestId('comment-mode-toggle')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
@@ -1440,36 +1429,322 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
   });
 
-  it('shows an inspect notice when a clicked child resolves to an annotated ancestor', async () => {
-    render(
-      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
-        liveHtml='<html><body><main data-od-id="hero"><h1>Hero</h1></main></body></html>'
+  it('stages a Command+M annotate snapshot into chat attachments', async () => {
+    const onStageBoardCapture = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/upload') {
+        return new Response(JSON.stringify({
+          files: [{
+            name: 'screenshot-1.png',
+            originalName: 'screenshot-1.png',
+            path: 'uploads/screenshot-1.png',
+            size: 123,
+          }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        onStageBoardCapture={onStageBoardCapture}
       />,
     );
 
-    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+    fireEvent.click(screen.getByTestId('annotate-mode-toggle'));
+    expect(screen.getByTestId('annotate-mode-toggle').className).toContain('active');
+    expect(screen.getByTestId('annotate-capture-button').className).not.toContain('active');
+    const frame = await waitFor(() => {
+      const next = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(next.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return next;
+    });
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    fireEvent.keyDown(window, { key: 'm', metaKey: true });
+
+    await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:annotate-trigger-capture'
+      ));
+      expect(call).toBeTruthy();
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:annotate-capture', overlay: { html: '<div id="oi-card">card</div>', css: '#oi-card{}', scrollX: 0, scrollY: 0 } },
+    }));
+
+    const snapshotMessage = await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:snapshot'
+      ));
+      expect(call).toBeTruthy();
+      return call![0] as { id: string; preferSvg?: boolean; skipOverlay?: boolean };
+    });
+    expect(snapshotMessage.preferSvg).toBe(false);
+    expect(snapshotMessage.skipOverlay).not.toBe(true);
+    const hostAnimationCall = postMessageSpy.mock.calls.find(([message]) => (
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: string }).type === 'od:annotate-trigger-animation'
+    ));
+    expect(hostAnimationCall).toBeUndefined();
 
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: {
-        type: 'od:comment-target',
-        elementId: 'hero',
-        selector: '[data-od-id="hero"]',
-        label: 'main',
-        text: 'Hero',
-        style: {},
-        clickedDescendant: {
-          label: 'h1',
-          text: 'Hero',
-        },
+        type: 'od:snapshot:result',
+        id: snapshotMessage.id,
+        dataUrl: 'data:image/png;base64,AAAA',
+        w: 100,
+        h: 50,
       },
     }));
 
-    const notice = await screen.findByTestId('inspect-ancestor-notice');
-    expect(notice.textContent).toContain('You clicked h1');
-    expect(notice.textContent).toContain('Editing main instead');
+    await waitFor(() => {
+      expect(onStageBoardCapture).toHaveBeenCalledWith({
+        path: 'uploads/screenshot-1.png',
+        name: 'screenshot-1.png',
+        kind: 'image',
+        size: 123,
+      });
+    });
   });
+
+  it('keeps HTML previews on the srcdoc path so screenshots match the visible frame', async () => {
+    const onStageBoardCapture = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/upload') {
+        return new Response(JSON.stringify({
+          files: [{
+            name: 'screenshot-clean.png',
+            originalName: 'screenshot-clean.png',
+            path: 'uploads/screenshot-clean.png',
+            size: 456,
+          }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero"><div id="oi-card">overlay</div>Hero</main></body></html>'
+        onStageBoardCapture={onStageBoardCapture}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(screen.queryByTestId('artifact-preview-frame-srcdoc')).toBeNull();
+    const previewHost = container.querySelector('.viewer-body') as HTMLElement;
+    Object.defineProperty(previewHost, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ bottom: 600, height: 600, left: 0, right: 900, top: 0, width: 900 }),
+    });
+    Object.defineProperty(frame, 'clientHeight', { configurable: true, value: 1200 });
+    Object.defineProperty(frame, 'clientWidth', { configurable: true, value: 900 });
+    Object.defineProperty(frame, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ bottom: 960, height: 1200, left: 0, right: 900, top: -240, width: 900 }),
+    });
+
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    fireEvent.click(screen.getByTestId('annotate-capture-button'));
+
+    const snapshotMessage = await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:snapshot'
+      ));
+      expect(call).toBeTruthy();
+      return call![0] as {
+        id: string;
+        preferSvg?: boolean;
+        skipOverlay?: boolean;
+        viewport?: { h: number; w: number; x: number; y: number };
+      };
+    });
+    expect(snapshotMessage.preferSvg).toBe(false);
+    expect(snapshotMessage.skipOverlay).toBe(true);
+    expect(snapshotMessage.viewport).toEqual({ h: 600, w: 900, x: 0, y: 240 });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:snapshot:result',
+        id: snapshotMessage.id,
+        dataUrl: 'data:image/png;base64,BBBB',
+        w: 100,
+        h: 50,
+      },
+    }));
+
+    expect(postMessageSpy.mock.calls.some(([message]) => (
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: string }).type === 'od:srcdoc-transport-activate'
+    ))).toBe(false);
+
+    await waitFor(() => {
+      expect(onStageBoardCapture).toHaveBeenCalledWith({
+        path: 'uploads/screenshot-clean.png',
+        name: 'screenshot-clean.png',
+        kind: 'image',
+        size: 456,
+      });
+    });
+  });
+
+  it('keeps annotation overlays in screenshot button captures while annotate mode is active', async () => {
+    const onStageBoardCapture = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/upload') {
+        return new Response(JSON.stringify({
+          files: [{
+            name: 'screenshot-annotate.png',
+            originalName: 'screenshot-annotate.png',
+            path: 'uploads/screenshot-annotate.png',
+            size: 789,
+          }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero"><div id="oi-card">overlay</div>Hero</main></body></html>'
+        onStageBoardCapture={onStageBoardCapture}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('annotate-mode-toggle'));
+    const frame = await waitFor(() => {
+      const next = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(next.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return next;
+    });
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    fireEvent.click(screen.getByTestId('annotate-capture-button'));
+
+    const snapshotMessage = await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:snapshot'
+      ));
+      expect(call).toBeTruthy();
+      return call![0] as { id: string; overlay?: { html?: string }; skipOverlay?: boolean };
+    });
+    expect(snapshotMessage.skipOverlay).not.toBe(true);
+    expect(snapshotMessage.overlay).toBeNull();
+    expect(postMessageSpy.mock.calls.some(([message]) => (
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: string }).type === 'od:annotate-trigger-capture'
+    ))).toBe(false);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:snapshot:result',
+        id: snapshotMessage.id,
+        dataUrl: 'data:image/png;base64,CCCC',
+        w: 100,
+        h: 50,
+      },
+    }));
+
+    await waitFor(() => {
+      expect(onStageBoardCapture).toHaveBeenCalledWith({
+        path: 'uploads/screenshot-annotate.png',
+        name: 'screenshot-annotate.png',
+        kind: 'image',
+        size: 789,
+      });
+    });
+  });
+
+  it('shows a toast when an annotate snapshot fails', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        onStageBoardCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('annotate-mode-toggle'));
+    const frame = await waitFor(() => {
+      const next = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(next.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return next;
+    });
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    fireEvent.keyDown(window, { key: 'm', metaKey: true });
+
+    await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:annotate-trigger-capture'
+      ));
+      expect(call).toBeTruthy();
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:annotate-capture' },
+    }));
+
+    const snapshotMessage = await waitFor(() => {
+      const call = postMessageSpy.mock.calls.find(([message]) => (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'od:snapshot'
+      ));
+      expect(call).toBeTruthy();
+      return call![0] as { id: string };
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:snapshot:result',
+        id: snapshotMessage.id,
+        error: 'snapshot image failed',
+      },
+    }));
+
+    await waitFor(async () => {
+      expect((await screen.findByRole('alert')).textContent).toContain('截图失败，请重试');
+    }, { timeout: 6500 });
+  }, 8000);
 
   it('keeps the Draw bar open after queueing an annotation', () => {
     render(
@@ -1491,26 +1766,23 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
   });
 
-  it('keeps the preloaded selection bridge mounted while the Draw bar switches to click mode', async () => {
+  it('keeps the visible srcdoc selection bridge mounted while the Draw bar switches to click mode', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
 
-    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
-    const inactiveSrcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
-    const postMessageSpy = vi.spyOn(inactiveSrcDocFrame.contentWindow!, 'postMessage');
+    const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(initialFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(screen.queryByTestId('artifact-preview-frame-srcdoc')).toBeNull();
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
 
     const frame = await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(activeFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+      expect(activeFrame.srcdoc).toContain('data-od-selection-bridge');
       return activeFrame;
-    });
-    await waitFor(() => {
-      expect(srcDocActivationMessages(postMessageSpy.mock.calls).at(-1)?.html).toContain('data-od-selection-bridge');
     });
     const initialSrcDoc = frame.srcdoc;
 

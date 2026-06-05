@@ -232,7 +232,8 @@ export function PreviewDrawOverlay({
   async function requestSnapshot(): Promise<{ dataUrl: string; w: number; h: number } | null> {
     const iframe = activePreviewIframe();
     if (!iframe) return null;
-    return requestPreviewSnapshot(iframe);
+    const snap = await requestPreviewSnapshot(iframe);
+    return snap?.dataUrl ? { dataUrl: snap.dataUrl, w: snap.w, h: snap.h } : null;
   }
 
   function drawCaptureTarget(

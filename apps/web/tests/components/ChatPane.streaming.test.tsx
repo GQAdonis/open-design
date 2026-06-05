@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
-import { forwardRef } from 'react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane, retryableAssistantMessage } from '../../src/components/ChatPane';
@@ -24,9 +24,45 @@ vi.mock('../../src/components/AssistantMessage', () => ({
 }));
 
 vi.mock('../../src/components/ChatComposer', () => ({
-  ChatComposer: forwardRef(({ streaming }: { streaming: boolean }, _ref) => (
-    <output data-testid="composer-streaming">{streaming ? 'streaming' : 'idle'}</output>
-  )),
+  ChatComposer: forwardRef(({
+    streaming,
+    incomingAttachments = [],
+    onIncomingAttachmentsAccepted,
+  }: {
+    streaming: boolean;
+    incomingAttachments?: Array<{ path: string; name: string }>;
+    onIncomingAttachmentsAccepted?: (paths: string[]) => void;
+  }, ref) => {
+    const [attachments, setAttachments] = useState<Array<{ path: string; name: string }>>([]);
+    useImperativeHandle(ref, () => ({
+      setDraft: vi.fn(),
+      focus: vi.fn(),
+    }), []);
+    useEffect(() => {
+      if (incomingAttachments.length === 0) return;
+      setAttachments((current) => {
+        const currentPaths = new Set(current.map((item) => item.path));
+        const additions: Array<{ path: string; name: string }> = [];
+        for (const att of incomingAttachments) {
+          if (currentPaths.has(att.path)) continue;
+          currentPaths.add(att.path);
+          additions.push(att);
+        }
+        return additions.length > 0 ? [...current, ...additions] : current;
+      });
+      onIncomingAttachmentsAccepted?.(incomingAttachments.map((att) => att.path));
+    }, [incomingAttachments, onIncomingAttachmentsAccepted]);
+    return (
+      <div>
+        <output data-testid="composer-streaming">{streaming ? 'streaming' : 'idle'}</output>
+        <div data-testid="mock-staged-attachments">
+          {attachments.map((att) => (
+            <span key={att.path} data-testid="mock-staged-attachment">{att.name}</span>
+          ))}
+        </div>
+      </div>
+    );
+  }),
 }));
 
 afterEach(() => {
@@ -156,6 +192,81 @@ Expected output:
 
     expect(screen.getByTestId('composer-streaming').textContent).toBe('idle');
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
+  });
+
+  it('stages pending capture attachments into the chat composer and consumes them by path', async () => {
+    const onConsumed = vi.fn();
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={[]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+        composerAttachmentInbox={[
+          { path: 'uploads/screenshot-1.png', name: 'screenshot-1.png', kind: 'image', size: 12 },
+        ]}
+        onComposerAttachmentsAccepted={(paths) => {
+          paths.forEach((path) => onConsumed(path));
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('screenshot-1.png')).toBeTruthy();
+    });
+    expect(onConsumed).toHaveBeenCalledWith('uploads/screenshot-1.png');
+  });
+
+  it('drains queued capture attachments without duplicating repeated paths', async () => {
+    function Harness() {
+      const [pending, setPending] = useState([
+        { path: 'uploads/screenshot-1.png', name: 'screenshot-1.png', kind: 'image' as const, size: 12 },
+        { path: 'uploads/screenshot-2.png', name: 'screenshot-2.png', kind: 'image' as const, size: 14 },
+        { path: 'uploads/screenshot-2.png', name: 'screenshot-2.png', kind: 'image' as const, size: 14 },
+      ]);
+      return (
+        <ChatPane
+          projectKindForTracking="prototype"
+          messages={[]}
+          streaming={false}
+          error={null}
+          projectId="project-1"
+          projectFiles={[]}
+          onEnsureProject={async () => 'project-1'}
+          onSend={vi.fn()}
+          onStop={vi.fn()}
+          conversations={conversations}
+          activeConversationId="conv-1"
+          onSelectConversation={vi.fn()}
+          onDeleteConversation={vi.fn()}
+          projectMetadata={projectMetadata}
+          composerAttachmentInbox={pending}
+          onComposerAttachmentsAccepted={(paths) => {
+            const accepted = new Set(paths);
+            setPending((current) => current.filter((att) => !accepted.has(att.path)));
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByText('screenshot-1.png')).toBeTruthy();
+      expect(screen.getByText('screenshot-2.png')).toBeTruthy();
+    });
+    expect(screen.getAllByTestId('mock-staged-attachment')).toHaveLength(2);
   });
 
   it('renders a stopped pinned todo after a terminal run without a final TodoWrite', () => {

@@ -4,13 +4,13 @@
  * Mirrors `design-templates/open-design-landing/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
  *
- * Static React component rendered by Astro. The Header and Wire components
- * own the small client-side behaviors; promote other sections to Astro
- * islands only when behavior is needed.
+ * Static React component rendered by Astro. The Header component owns the
+ * small client-side behaviors; promote other sections to Astro islands only
+ * when behavior is needed.
  */
 
+import { GradualBlur } from './_components/gradual-blur';
 import { Header, type HeaderProps } from './_components/header';
-import { Wire } from './_components/wire';
 import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
@@ -68,12 +68,57 @@ const arrowOut = (
   </svg>
 );
 
+const arrowBack = (
+  <svg viewBox='0 0 24 24'>
+    <path d='M11 5l-7 7 7 7M4 12h16' />
+  </svg>
+);
+
 const arrowPlus = (
   <svg viewBox='0 0 24 24'>
     <circle cx='12' cy='12' r='9' />
     <path d='M9 12h6M12 9v6' />
   </svg>
 );
+
+// Capability-card glyphs (line style, 24px grid). Shared by the localized
+// step flow and the legacy non-zh capability cards.
+const capIcon = {
+  search: (
+    <svg className='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <circle cx='9' cy='9' r='5' />
+      <path d='M14 14l5 5' />
+    </svg>
+  ),
+  direction: (
+    <svg className='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <circle cx='12' cy='12' r='9' />
+      <path d='M12 3a9 9 0 0 0 0 18' />
+      <circle cx='8.5' cy='9' r='1' />
+      <circle cx='15' cy='10' r='1' />
+    </svg>
+  ),
+  grid: (
+    <svg className='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <rect x='3.5' y='3.5' width='8' height='8' />
+      <rect x='12.5' y='3.5' width='8' height='8' />
+      <rect x='3.5' y='12.5' width='8' height='8' />
+      <rect x='12.5' y='12.5' width='8' height='8' />
+    </svg>
+  ),
+  adapters: (
+    <svg className='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <circle cx='8' cy='12' r='4.5' />
+      <circle cx='16' cy='12' r='4.5' />
+    </svg>
+  ),
+  layers: (
+    <svg className='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <path d='M5 8h14v8H5z' />
+      <path d='M9 12h6M12 9v6' />
+    </svg>
+  ),
+} as const;
 
 const NBSP = '\u00A0';
 
@@ -89,56 +134,42 @@ const REPO_ISSUES = `${REPO}/issues`;
 const REPO_CONTRIBUTORS = `${REPO}/graphs/contributors`;
 const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
-const REPO_DESIGN_SYSTEMS = `${REPO}/tree/main/design-systems`;
 const REPO_DOCS = `${REPO}#readme`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
-
-// Lineage / inspiration projects — make every brand mention clickable.
-const LINEAGE = {
-  'huashu-design': 'https://github.com/alchaincyf/huashu-design',
-  'guizang-ppt': 'https://github.com/op7418/guizang-ppt-skill',
-  'multica-ai': 'https://github.com/multica-ai/multica',
-  'open-codesign': 'https://github.com/OpenCoworkAI/open-codesign',
-  'devin-cli': 'https://devin.ai/terminal',
-  hyperframes: 'https://github.com/heygen-com/hyperframes',
-} as const;
 
 const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',
 } as const;
 
-// Global wire — cities the studio is composed from. The cities feed
-// the top counter-scrolling marquee in the editorial ticker between
-// the hero and the About section; the bottom contributor marquee is
-// owned by `<Wire />`, which fetches the actual repo contributors
-// from GitHub at runtime. Keep coordinates rough to fit the
-// editorial register.
-const WIRE_CITIES = [
-  { name: 'Berlin', coord: '52.52°N' },
-  { name: 'Tokyo', coord: '35.68°N' },
-  { name: 'Shanghai', coord: '31.23°N' },
-  { name: 'Beijing', coord: '39.90°N' },
-  { name: 'Taipei', coord: '25.03°N' },
-  { name: 'Singapore', coord: '1.35°N' },
-  { name: 'Bangalore', coord: '12.97°N' },
-  { name: 'Dubai', coord: '25.20°N' },
-  { name: 'Lagos', coord: '6.52°N' },
-  { name: 'Nairobi', coord: '1.29°S' },
-  { name: 'Cape Town', coord: '33.92°S' },
-  { name: 'Lisbon', coord: '38.72°N' },
-  { name: 'Madrid', coord: '40.42°N' },
-  { name: 'Paris', coord: '48.86°N' },
-  { name: 'London', coord: '51.51°N' },
-  { name: 'Amsterdam', coord: '52.37°N' },
-  { name: 'Stockholm', coord: '59.33°N' },
-  { name: 'Toronto', coord: '43.65°N' },
-  { name: 'New York', coord: '40.71°N' },
-  { name: 'San Francisco', coord: '37.77°N' },
-  { name: 'Mexico City', coord: '19.43°N' },
-  { name: 'São Paulo', coord: '23.55°S' },
-  { name: 'Sydney', coord: '33.87°S' },
-] as const;
+// Coding-agent logos that fall in the Method section's FallingText physics
+// playground (matter-js). Each is an icon chip that drops on hover instead of
+// a text word. Assets live in `public/agent-icons/`.
+const FALLING_ICONS = [
+  { src: '/agent-icons/claude.svg', alt: 'Claude' },
+  { src: '/agent-icons/codex.svg', alt: 'Codex' },
+  { src: '/agent-icons/gemini.svg', alt: 'Gemini' },
+  { src: '/agent-icons/cursor-agent.svg', alt: 'Cursor' },
+  { src: '/agent-icons/copilot.svg', alt: 'GitHub Copilot' },
+  { src: '/agent-icons/opencode.svg', alt: 'OpenCode' },
+  { src: '/agent-icons/devin.png', alt: 'Devin' },
+  { src: '/agent-icons/hermes.svg', alt: 'Hermes' },
+  { src: '/agent-icons/pi.svg', alt: 'Pi' },
+  { src: '/agent-icons/kimi.svg', alt: 'Kimi' },
+  { src: '/agent-icons/kiro.svg', alt: 'Kiro' },
+  { src: '/agent-icons/qwen.svg', alt: 'Qwen' },
+  { src: '/agent-icons/grok-build.svg', alt: 'Grok' },
+  { src: '/agent-icons/deepseek.svg', alt: 'DeepSeek' },
+  { src: '/agent-icons/qoder.svg', alt: 'Qoder' },
+  { src: '/agent-icons/amr.svg', alt: 'AMR' },
+  { src: '/agent-icons/kilo.svg', alt: 'Kilo' },
+  { src: '/agent-icons/aider.png', alt: 'Aider' },
+  { src: '/agent-icons/trae-cli.png', alt: 'Trae' },
+  { src: '/agent-icons/vibe.svg', alt: 'Mistral Vibe' },
+  { src: '/agent-icons/mimo.svg', alt: 'MiMo' },
+  { src: '/agent-icons/antigravity.svg', alt: 'Antigravity' },
+  { src: '/agent-icons/reasonix.svg', alt: 'Reasonix' },
+];
 
 /**
  * Question / answer pair for the visible homepage FAQ. The exact same
@@ -193,6 +224,50 @@ function pad2(n: number | undefined): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
+/**
+ * The ABOUT statement, rendered as a Magic UI / Inspira "Text Scroll Reveal":
+ * each token starts faint and brightens to full ink as the reader scrolls
+ * through the pinned section (opacity driven by `enhanceStatementReveal` in
+ * `pages/index.astro`). Kept as one continuous wrapped paragraph.
+ */
+const ABOUT_STATEMENT =
+  '2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计，不是写文章，是直接产出设计稿。' +
+  ' 但它闭源、付费、只跑在云端，模型锁 Anthropic，换 Agent、自部署、BYOK 全做不到。' +
+  ' Open Design 让这套能力变得开放。';
+
+/**
+ * Splits reveal copy into per-token spans. CJK characters/punctuation become
+ * individual tokens (so they light up one at a time, since CJK has no word
+ * spaces), runs of Latin letters/digits stay whole, and ASCII spaces are kept
+ * as literal separators so Latin words don't run together when they wrap.
+ */
+const CJK_TOKEN = /[぀-ヿ㐀-鿿　-〿＀-￯]/;
+function tokenizeReveal(
+  text: string,
+): Array<{ type: 'word'; value: string } | { type: 'space' }> {
+  const tokens: Array<{ type: 'word'; value: string } | { type: 'space' }> = [];
+  let buf = '';
+  const flush = () => {
+    if (buf) {
+      tokens.push({ type: 'word', value: buf });
+      buf = '';
+    }
+  };
+  for (const ch of text) {
+    if (ch === ' ') {
+      flush();
+      tokens.push({ type: 'space' });
+    } else if (CJK_TOKEN.test(ch)) {
+      flush();
+      tokens.push({ type: 'word', value: ch });
+    } else {
+      buf += ch;
+    }
+  }
+  flush();
+  return tokens;
+}
+
 export default function Page({
   counts,
   github,
@@ -213,125 +288,130 @@ export default function Page({
   }));
   const href = (path: string) => localizedHref(path, locale);
 
+  /**
+   * Capability cards. The zh homepage renders the five-step flow verbatim
+   * (eyebrow "Step N — 名称" + description), reusing the card-1 layout. Other
+   * locales keep the original four feature cards driven by i18n copy.
+   */
+  const capabilityCards: ReadonlyArray<{
+    num: React.ReactNode;
+    title?: React.ReactNode;
+    body: React.ReactNode;
+    icon: React.ReactNode;
+    href: string;
+    aria: string;
+  }> =
+    locale === 'zh'
+      ? [
+          {
+            num: 'Step 1 — 选择起点',
+            body: '一句话描述目标，或从模板 / Plugin 直接选起点。',
+            icon: capIcon.search,
+            href: REPO_SKILLS,
+            aria: '选择起点',
+          },
+          {
+            num: 'Step 2 — 确定视觉方向',
+            body: '选定方向后，色板、字体、间距自动带入生成流程。',
+            icon: capIcon.direction,
+            href: REPO_SKILLS,
+            aria: '确定视觉方向',
+          },
+          {
+            num: 'Step 3 — 生成 Artifact',
+            body: 'Agent 读取所有 context，产出真实可运行的文件，沙盒内即时预览和修改。',
+            icon: capIcon.grid,
+            href: REPO_DAEMON,
+            aria: '生成 Artifact',
+          },
+          {
+            num: 'Step 4 — 交付或制作视频',
+            body: '导出给工程继续开发，或用 HyperFrames 直接转为营销视频。',
+            icon: capIcon.adapters,
+            href: REPO,
+            aria: '交付或制作视频',
+          },
+          {
+            num: 'Step 5 — 记忆沉淀',
+            body: '每次选择都成为下次生成的上下文，越用越精准。',
+            icon: capIcon.layers,
+            href: REPO,
+            aria: '记忆沉淀',
+          },
+        ]
+      : home.capabilities.cards.map((card, index) => {
+          const icons = [capIcon.search, capIcon.grid, capIcon.adapters, capIcon.layers];
+          const hrefs = [REPO_SKILLS, REPO_SKILLS, REPO_DAEMON, REPO];
+          return {
+            num: (
+              <>
+                {`0${index + 1}`}
+                <span className='tag'>{card.tag}</span>
+              </>
+            ),
+            title: <BreakText text={card.title} />,
+            body: card.body(skills, systems),
+            icon: icons[index] ?? capIcon.search,
+            href: hrefs[index] ?? REPO,
+            aria: card.aria,
+          };
+        });
+
+  /**
+   * Deck-preview art for the Labs product-window showcase. Language-neutral —
+   * each Dock mode maps onto one of these images (cycling), and the active
+   * slide reuses the first. `labFallback` keeps the typed access non-optional
+   * under `noUncheckedIndexedAccess`.
+   */
+  const labArtifacts = [
+    '/lab-cards/card-1.png',
+    '/lab-cards/card-2.png',
+    '/lab-cards/card-3.png',
+    '/lab-cards/card-4.png',
+    '/lab-cards/card-5.png',
+    '/lab-cards/card-6.png',
+  ];
+  const labActive = labArtifacts[0] ?? '';
+
   return (
     <>
-      {/* side rails (rotated brand text) */}
-      <div className='side-rail right' data-od-id='rail-right'>
-        <span className='rail-text'>{home.rail.right}</span>
-      </div>
-      <div className='side-rail left' data-od-id='rail-left'>
-        <span className='rail-text'>{home.rail.left}</span>
-      </div>
-
       <div className='shell'>
-        {/* ====== STICKY CHROME (topbar + nav as one unit) ====== */}
+        {/* ====== STICKY CHROME ====== */}
         <div className='site-chrome' data-chrome-headroom>
-        {/* ====== TOP METADATA STRIP ====== */}
-        <div className='topbar' data-od-id='topbar'>
-          <div className='container topbar-inner'>
-            <span>
-              <b>OD / 2026</b>
-              {NBSP}·{NBSP}
-              {commonCopy.topbar.issue ?? 'Vol. 01 / Issue Nº 26'}
-            </span>
-            <span className='mid'>
-              <span>
-                {commonCopy.topbar.filedUnder}{' '}
-                <b className='coral'>{commonCopy.topbar.category}</b>
-              </span>
-              <span>{commonCopy.topbar.madeOnEarth}</span>
-            </span>
-            <span className='right'>
-              <a className='topbar-link' href={REPO_RELEASES} {...ext}>
-                <span className='pulse' />
-                {commonCopy.topbar.live} ·{' '}
-                <span data-github-version>{github.versionLabel}</span>
-              </a>
-              <details className='locale-switch' data-locale-switch>
-                <summary
-                  className='locale-trigger'
-                  aria-label={commonCopy.topbar.languageSwitcherLabel}
-                >
-                  <span className='locale-trigger-prefix' aria-hidden='true'>
-                    {commonCopy.topbar.languageSwitcherPrefix ?? 'Lang'}
-                  </span>
-                  <span className='locale-trigger-sep' aria-hidden='true'>
-                    ·
-                  </span>
-                  <span className='locale-trigger-code'>
-                    {localeDef.shortLabel}
-                  </span>
-                  <svg
-                    className='locale-trigger-caret'
-                    viewBox='0 0 8 5'
-                    aria-hidden='true'
-                    focusable='false'
-                  >
-                    <path
-                      d='M0.5 0.75 L4 4 L7.5 0.75'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1'
-                      strokeLinecap='square'
-                    />
-                  </svg>
-                </summary>
-                <div className='locale-menu' role='menu'>
-                  {localeOptions.map((entry) => (
-                    <a
-                      className={`locale-menu-item${
-                        entry.code === locale ? ' is-active' : ''
-                      }`}
-                      role='menuitem'
-                      data-locale-link
-                      data-locale-code={entry.code}
-                      href={entry.href}
-                      lang={entry.htmlLang}
-                      aria-current={entry.code === locale ? 'true' : undefined}
-                      key={entry.code}
-                    >
-                      <span className='locale-menu-code'>
-                        {entry.code.toUpperCase()}
-                      </span>
-                      <span className='locale-menu-label'>{entry.label}</span>
-                    </a>
-                  ))}
-                </div>
-              </details>
-            </span>
-          </div>
-        </div>
-
         {/* ====== NAV ====== */}
         {/* Headroom slide handled by `.site-chrome` wrapper above. */}
-        <Header counts={counts} github={github} locale={locale} />
+        <Header
+          counts={counts}
+          github={github}
+          locale={locale}
+          localeSwitcher={{
+            label: commonCopy.topbar.languageSwitcherLabel,
+            prefix: commonCopy.topbar.languageSwitcherPrefix ?? 'Lang',
+            shortLabel: localeDef.shortLabel,
+            options: localeOptions,
+          }}
+        />
         </div>{/* /site-chrome */}
 
         {/* ====== HERO ====== */}
         <section className='hero' id='top' data-od-id='hero'>
+          {/* Full-bleed hero backdrop. Covers the whole first screen behind
+              the copy; the design-canvas artwork bleeds edge to edge while
+              the headline/CTAs sit on top via the grid's higher stacking. */}
+          <img
+            className='hero-bg'
+            src={heroImage}
+            srcSet={heroImageSrcset}
+            sizes='100vw'
+            width={2880}
+            height={1912}
+            alt=''
+            aria-hidden='true'
+            fetchPriority='high'
+            decoding='async'
+          />
           <div className='container hero-grid'>
             <div className='hero-copy'>
-              <a
-                className='hero-discord-pill'
-                href={DISCORD}
-                aria-label={home.hero.discordAria}
-                {...ext}
-                data-reveal
-              >
-                <span aria-hidden='true'>●</span>
-                {home.hero.joinDiscord}
-              </a>
-              <span className='label' data-reveal>
-                {home.hero.label} <span className='ix'>· {home.hero.issue}</span>
-              </span>
-              <h1 className='display' data-reveal>
-                {home.hero.titlePrefix} <em>{home.hero.titleEmphasis}</em>{' '}
-                {home.hero.titleMiddle} <em>{home.hero.titleSecondEmphasis}</em>
-                <span className='dot'>.</span>
-              </h1>
-              <p className='lead' data-reveal>
-                {home.hero.lead(skills, systems)}
-              </p>
               <div className='hero-actions' data-reveal>
                 <a className='btn btn-primary' href={REPO} {...ext}>
                   {home.hero.star}
@@ -342,155 +422,6 @@ export default function Page({
                   <span className='arrow'>{arrowPlus}</span>
                 </a>
               </div>
-              <div className='hero-stats' data-reveal>
-                <div className='stat'>
-                  <span className='ring solid'>{skills}</span>
-                  <span className='stat-label'>
-                    <b>{home.hero.stats[0].strong}</b>
-                    {home.hero.stats[0].text}
-                  </span>
-                </div>
-                <div className='stat'>
-                  <span className='ring'>{systems}</span>
-                  <span className='stat-label'>
-                    <b>{home.hero.stats[1].strong}</b>
-                    {home.hero.stats[1].text}
-                  </span>
-                </div>
-                <div className='stat'>
-                  <span className='ring coral'>12</span>
-                  <span className='stat-label'>
-                    <b>{home.hero.stats[2].strong}</b>
-                    {home.hero.stats[2].text}
-                  </span>
-                </div>
-              </div>
-              <div className='hero-foot' data-reveal>
-                <span className='meta'>↳{NBSP}{NBSP}{home.hero.foot}</span>
-                <span className='coord'>
-                  52.5200° N{NBSP}·{NBSP}13.4050° E
-                </span>
-              </div>
-            </div>
-            <div className='hero-art' data-reveal='scale'>
-              <span className='corner tl' />
-              <span className='corner tr' />
-              <span className='corner bl' />
-              <span className='corner br' />
-              <span className='annot annot-tl coord'>FIG. 01 / OD-26</span>
-              <span className='annot annot-tr'>{home.hero.plate}</span>
-              <span className='annot annot-bl coord'>SHA · a1b2c3d</span>
-              <span className='annot annot-br'>
-                {home.hero.composedIn}
-                {NBSP}
-                <span style={{ color: 'var(--coral)' }}>Open Design</span>
-              </span>
-              <img
-                src={heroImage}
-                srcSet={heroImageSrcset}
-                sizes='(max-width: 768px) 100vw, 60vw'
-                width={1280}
-                height={1600}
-                alt=''
-                fetchPriority='high'
-                decoding='async'
-              />
-              <div className='index'>
-                <span>
-                  <span className='n'>01</span>
-                  {home.hero.index[0]}
-                </span>
-                <span className='on'>
-                  <span className='n'>02</span>
-                  {home.hero.index[1]}
-                </span>
-                <span>
-                  <span className='n'>03</span>
-                  {home.hero.index[2]}
-                </span>
-                <span>
-                  <span className='n'>04</span>
-                  {home.hero.index[3]}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ====== WIRE / GLOBAL TICKER ====== */}
-        {/*
-         * Slim editorial ticker between the hero and About. Two
-         * counter-scrolling marquees signal that the project is
-         * global (cities, top row) and contributor-driven (handles,
-         * bottom row). Pure CSS animation; the track content is
-         * doubled in markup so the loop wraps seamlessly.
-         *
-         * Lives inside a client island because the contributor row is
-         * fetched live from the GitHub contributors API; the cities
-         * row is passed through as static data.
-         */}
-        <Wire cities={WIRE_CITIES} />
-
-        {/* ====== OFFICIAL SOURCE STRIP ======
-         *
-         * Thin attestation band that reinforces the canonical surfaces:
-         * official site, GitHub repo, releases, download, docs, Discord.
-         * Mirrors the Organization.sameAs + SoftwareApplication signals
-         * emitted in `pages/index.astro` so both Google entity-merge and
-         * human verification see the same six links in the same order.
-         * Keep this small (one line of icons + labels); the editorial
-         * sections below carry the heavy explanation.
-         */}
-        <section
-          className='official-strip'
-          data-od-id='official-strip'
-          aria-label={home.official.aria}
-        >
-          <div className='container'>
-            <div className='official-strip-inner' data-reveal>
-              <span className='official-strip-label'>
-                {home.official.label} <span className='ix'>· Nº 00</span>
-              </span>
-              <ul className='official-strip-list'>
-                <li>
-                  <a href={href('/official/')}>
-                    <span className='label'>{home.official.items[0].label}</span>
-                    <span className='value'>{home.official.items[0].value}</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={REPO} {...ext}>
-                    <span className='label'>{home.official.items[1].label}</span>
-                    <span className='value'>{home.official.items[1].value}</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={REPO_RELEASES} {...ext}>
-                    <span className='label'>{home.official.items[2].label}</span>
-                    <span className='value' data-github-version>
-                      {github.versionLabel}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={REPO_RELEASES} {...ext}>
-                    <span className='label'>{home.official.items[3].label}</span>
-                    <span className='value'>{home.official.items[3].value}</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={REPO_DOCS} {...ext}>
-                    <span className='label'>{home.official.items[4].label}</span>
-                    <span className='value'>{home.official.items[4].value}</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={DISCORD} {...ext}>
-                    <span className='label'>{home.official.items[5].label}</span>
-                    <span className='value'>{home.official.items[5].value}</span>
-                  </a>
-                </li>
-              </ul>
             </div>
           </div>
         </section>
@@ -498,55 +429,81 @@ export default function Page({
         {/* ====== ABOUT ====== */}
         <section className='about' data-od-id='about'>
           <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>I.</span>
-              <span className='meta-grp'>
-                <span>{home.about.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.about.volume}</span>
-              </span>
-              <span>002 / 008</span>
-            </div>
             <div className='about-grid'>
               <div className='about-copy' data-reveal>
-                <span className='label'>
-                  {home.about.label} <span className='ix'>· Nº 02</span>
-                </span>
-                <h2 className='display'>
-                  {home.about.titlePrefix} <em>{home.about.titleAgent}</em>{' '}
-                  {home.about.titleMiddle} <em>{home.about.titleCollaborator}</em>{' '}
-                  {home.about.titleSuffix}
-                  <span className='dot'>.</span>
-                </h2>
-                <p className='lead'>{home.about.lead}</p>
-                <a className='btn btn-ghost' href={REPO_DAEMON} {...ext}>
-                  {home.about.approach}
-                  <span className='arrow'>{arrowOut}</span>
-                </a>
-                <div className='footer-row'>
-                  <span className='mark'>Ø</span>
-                  <span>{home.about.practice}</span>
-                  <span className='stamp'>
-                    <span>{home.about.stampTop}</span>
-                    <span style={{ color: 'var(--ink)' }}>
-                      {home.about.stampBottom}
-                    </span>
-                  </span>
+                <p className='about-kicker'>为什么选择 Open Design？</p>
+                {/*
+                  Text Scroll Reveal (Magic UI / Inspira port): a tall track
+                  with a sticky, vertically-centered paragraph whose tokens
+                  brighten one by one as the reader scrolls. `data-about-reveal`
+                  is the scroll host; `enhanceStatementReveal` in
+                  `pages/index.astro` maps scroll progress → per-token opacity.
+                */}
+                <div className='about-reveal' data-about-reveal>
+                  <div className='about-reveal-sticky'>
+                    <h2 className='display about-reveal-text'>
+                      {tokenizeReveal(ABOUT_STATEMENT).map((tok, i) =>
+                        tok.type === 'space' ? (
+                          <span className='reveal-space' key={i}>
+                            {' '}
+                          </span>
+                        ) : (
+                          <span className='reveal-word' data-reveal-word key={i}>
+                            {tok.value}
+                          </span>
+                        ),
+                      )}
+                    </h2>
+                  </div>
                 </div>
-              </div>
-              <div className='about-art' data-reveal='right'>
-                <LazyImg src={imageAsset('about.png', { width: 1024, quality: 82 })} />
-                <div className='about-side-note'>
-                  <b />
-                  {home.about.sideNote.map((line) => (
-                    <span key={line}>
-                      {line}
-                      <br />
-                    </span>
-                  ))}
-                </div>
-                <div className='about-caption'>
-                  <b>{home.about.caption}</b>
+                <div className='about-tabs' data-reveal>
+                  <input
+                    type='radio'
+                    name='about-tab'
+                    id='about-tab-1'
+                    className='about-tab-radio'
+                    defaultChecked
+                  />
+                  <input
+                    type='radio'
+                    name='about-tab'
+                    id='about-tab-2'
+                    className='about-tab-radio'
+                  />
+                  <input
+                    type='radio'
+                    name='about-tab'
+                    id='about-tab-3'
+                    className='about-tab-radio'
+                  />
+                  <div className='about-tablist' role='tablist'>
+                    <label className='about-tab' htmlFor='about-tab-1'>
+                      桌面端原生
+                    </label>
+                    <label className='about-tab' htmlFor='about-tab-2'>
+                      不造 Agent，接入 Agent
+                    </label>
+                    <label className='about-tab' htmlFor='about-tab-3'>
+                      越用越懂你
+                    </label>
+                  </div>
+                  <div className='about-panels'>
+                    <div className='about-panel'>
+                      <p>
+                        设计在桌面端发生。本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力。
+                      </p>
+                    </div>
+                    <div className='about-panel'>
+                      <p>
+                        你电脑上的 Claude Code / Codex / Cursor 已经够强。OD 做的是把它们接进完整设计工作流。
+                      </p>
+                    </div>
+                    <div className='about-panel'>
+                      <p>
+                        每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果。
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -560,146 +517,44 @@ export default function Page({
           data-od-id='capabilities'
         >
           <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>II.</span>
-              <span className='meta-grp'>
-                <span>{home.capabilities.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.capabilities.surfaces}</span>
-              </span>
-              <span>003 / 008</span>
-            </div>
             <div className='capabilities-grid'>
-              <div className='capabilities-art' data-reveal='left'>
-                <span className='corner tl' />
-                <span className='corner br' />
-                <LazyImg src={imageAsset('capabilities.png', { width: 1024, quality: 82 })} />
-                <div className='ribbon'>
-                  <b>{home.capabilities.ribbon}</b>
-                </div>
-              </div>
               <div className='capabilities-copy' data-reveal>
-                <span className='label'>
-                  {home.capabilities.label} <span className='ix'>· Nº 03</span>
-                </span>
-                <h2 className='display'>
-                  {home.capabilities.titlePrefix}{' '}
-                  <em>{home.capabilities.titleEmphasis}</em>{' '}
-                  {home.capabilities.titleSuffix}
-                  <span className='dot'>.</span>
-                </h2>
-                <p className='lead'>{home.capabilities.lead}</p>
-                <div className='cards'>
-                  <div className='card' data-reveal>
-                    <div className='num'>
-                      01<span className='tag'>{home.capabilities.cards[0].tag}</span>
+                <div className='capabilities-head'>
+                  <h2 className='display'>
+                    {locale === 'zh' ? (
+                      '从想法到交付，轻松搞定'
+                    ) : (
+                      <>
+                        {home.capabilities.titlePrefix}{' '}
+                        <em>{home.capabilities.titleEmphasis}</em>{' '}
+                        {home.capabilities.titleSuffix}
+                        <span className='dot'>.</span>
+                      </>
+                    )}
+                  </h2>
+                  <p className='lead'>{home.capabilities.lead}</p>
+                </div>
+                <div className='cards cards-stack'>
+                  {capabilityCards.map((card, index) => (
+                    <div
+                      className='card'
+                      key={index}
+                      style={{ ['--i' as string]: index } as React.CSSProperties}
+                    >
+                      <div className='num'>{card.num}</div>
+                      {card.icon}
+                      {card.title ? <h3>{card.title}</h3> : null}
+                      <p>{card.body}</p>
+                      <a
+                        className='arrow-mark'
+                        href={card.href}
+                        aria-label={card.aria}
+                        {...ext}
+                      >
+                        {arrowOut}
+                      </a>
                     </div>
-                    <svg
-                      className='icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1.5'
-                    >
-                      <circle cx='9' cy='9' r='5' />
-                      <path d='M14 14l5 5' />
-                    </svg>
-                    <h3>
-                      <BreakText text={home.capabilities.cards[0].title} />
-                    </h3>
-                    <p>{home.capabilities.cards[0].body(skills, systems)}</p>
-                    <a
-                      className='arrow-mark'
-                      href={REPO_SKILLS}
-                      aria-label={home.capabilities.cards[0].aria}
-                      {...ext}
-                    >
-                      {arrowOut}
-                    </a>
-                  </div>
-                  <div className='card' data-reveal>
-                    <div className='num'>
-                      02<span className='tag'>{home.capabilities.cards[1].tag}</span>
-                    </div>
-                    <svg
-                      className='icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1.5'
-                    >
-                      <rect x='3.5' y='3.5' width='8' height='8' />
-                      <rect x='12.5' y='3.5' width='8' height='8' />
-                      <rect x='3.5' y='12.5' width='8' height='8' />
-                      <rect x='12.5' y='12.5' width='8' height='8' />
-                    </svg>
-                    <h3>
-                      <BreakText text={home.capabilities.cards[1].title} />
-                    </h3>
-                    <p>{home.capabilities.cards[1].body(skills, systems)}</p>
-                    <a
-                      className='arrow-mark'
-                      href={REPO_DESIGN_SYSTEMS}
-                      aria-label={home.capabilities.cards[1].aria}
-                      {...ext}
-                    >
-                      {arrowOut}
-                    </a>
-                  </div>
-                  <div className='card' data-reveal>
-                    <div className='num'>
-                      03<span className='tag'>{home.capabilities.cards[2].tag}</span>
-                    </div>
-                    <svg
-                      className='icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1.5'
-                    >
-                      <circle cx='8' cy='12' r='4.5' />
-                      <circle cx='16' cy='12' r='4.5' />
-                    </svg>
-                    <h3>
-                      <BreakText text={home.capabilities.cards[2].title} />
-                    </h3>
-                    <p>{home.capabilities.cards[2].body(skills, systems)}</p>
-                    <a
-                      className='arrow-mark'
-                      href={REPO_DAEMON}
-                      aria-label={home.capabilities.cards[2].aria}
-                      {...ext}
-                    >
-                      {arrowOut}
-                    </a>
-                  </div>
-                  <div className='card' data-reveal>
-                    <div className='num'>
-                      04<span className='tag'>{home.capabilities.cards[3].tag}</span>
-                    </div>
-                    <svg
-                      className='icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1.5'
-                    >
-                      <path d='M5 8h14v8H5z' />
-                      <path d='M9 12h6M12 9v6' />
-                    </svg>
-                    <h3>
-                      <BreakText text={home.capabilities.cards[3].title} />
-                    </h3>
-                    <p>{home.capabilities.cards[3].body(skills, systems)}</p>
-                    <a
-                      className='arrow-mark'
-                      href={REPO}
-                      aria-label={home.capabilities.cards[3].aria}
-                      {...ext}
-                    >
-                      {arrowOut}
-                    </a>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -709,168 +564,174 @@ export default function Page({
         {/* ====== LABS ====== */}
         <section className='labs' id='labs' data-od-id='labs'>
           <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>III.</span>
-              <span className='meta-grp'>
-                <span>{home.labs.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.labs.ongoing(skills)}</span>
-              </span>
-              <span>004 / 008</span>
-            </div>
             <div className='labs-head'>
               <div data-reveal>
-                <span className='label'>
-                  {home.labs.label} <span className='ix'>· Nº 04</span>
-                </span>
-                <h2 className='display' style={{ marginTop: 30 }}>
-                  {home.labs.titlePrefix} <em>{home.labs.titleEmphasis}</em>{' '}
-                  {home.labs.titleSuffix}
-                  <span className='dot'>.</span>
+                <h2 className='display'>
+                  用 <em>Open Design</em> 能产出什么
+                  <span className='dot'>？</span>
                 </h2>
               </div>
-              <div className='pills' data-reveal='right'>
-                <a className='pill active' href={href('/skills/')}>
-                  {home.labs.pills.all}
-                  <span className='count'>{skills}</span>
-                </a>
-                <a className='pill' href={href('/skills/mode/prototype/')}>
-                  {home.labs.pills.prototype}
-                  <span className='count'>{prototypeCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/mode/deck/')}>
-                  {home.labs.pills.deck}
-                  <span className='count'>{deckCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/')}>
-                  {home.labs.pills.mobile}
-                  <span className='count'>{mobileCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/')}>
-                  {home.labs.pills.office}
-                  <span className='count'>—</span>
-                </a>
-              </div>
             </div>
-            <div className='labs-meta'>
-              <span className='ring'>05</span>
-              <div className='meta-text'>
-                <b>{home.labs.metaTitle}</b>
-                <BreakText text={home.labs.metaBody} />
-              </div>
-            </div>
-            <div className='labs-grid'>
-              {[
-                {
-                  badge: home.labs.items[0].badge,
-                  num: 'Nº 01',
-                  title: home.labs.items[0].title,
-                  body: home.labs.items[0].body,
-                  src: imageAsset('lab-1.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/guizang-ppt`,
-                },
-                {
-                  badge: home.labs.items[1].badge,
-                  num: 'Nº 02',
-                  title: home.labs.items[1].title,
-                  body: home.labs.items[1].body,
-                  src: imageAsset('lab-2.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/hyperframes`,
-                },
-                {
-                  badge: home.labs.items[2].badge,
-                  num: 'Nº 03',
-                  title: home.labs.items[2].title,
-                  body: home.labs.items[2].body,
-                  src: imageAsset('lab-3.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/design-brief`,
-                },
-                {
-                  badge: home.labs.items[3].badge,
-                  num: 'Nº 04',
-                  title: home.labs.items[3].title,
-                  body: home.labs.items[3].body,
-                  src: imageAsset('lab-4.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/critique`,
-                },
-                {
-                  badge: home.labs.items[4].badge,
-                  num: 'Nº 05',
-                  title: home.labs.items[4].title,
-                  body: home.labs.items[4].body,
-                  src: imageAsset('lab-5.png', { width: 768, quality: 82 }),
-                  href: REPO_DAEMON,
-                },
-              ].map((lab) => (
-                <div className='lab' key={lab.num} data-reveal>
-                  <div className='lab-img'>
-                    <span className='badge'>{lab.badge}</span>
-                    <LazyImg src={lab.src} />
-                  </div>
-                  <div className='num-row'>
-                    <span>{lab.num}</span>
-                    <span>2026</span>
-                  </div>
-                  <h4>{lab.title}</h4>
-                  <p>{lab.body}</p>
-                  <a
-                    className='arrow-mark'
-                    href={lab.href}
-                    aria-label={home.labs.openAria(lab.title)}
-                    {...ext}
-                  >
-                    {arrowOut}
-                  </a>
+            {/* Labs — the Open Design product window (deck editor) on a
+                full-bleed canvas, with the mode Dock floating over its lower
+                edge. The deck preview swaps with the Dock (enhancer in
+            `pages/index.astro`); all preview art reuses the lab images. */}
+            <div className='lab-stage' data-reveal>
+              <div className='lab-app'>
+                {/* window tab strip */}
+                <div className='la-tabs'>
+                  <span className='la-tab'>
+                    <svg viewBox='0 0 24 24'><path d='M4 11l8-6 8 6' /><path d='M6 10v9h12v-9' /></svg>
+                    主页
+                  </span>
+                  <span className='la-tab is-active'>
+                    <svg viewBox='0 0 24 24'><path d='M4 7h5l2 2h9v9H4z' /></svg>
+                    Simple Deck
+                    <svg className='la-x' viewBox='0 0 24 24'><path d='M7 7l10 10M17 7L7 17' /></svg>
+                  </span>
                 </div>
+                {/* document toolbar */}
+                <div className='la-bar'>
+                  <span className='la-back' aria-hidden='true'>{arrowBack}</span>
+                  <span className='la-name'>Simple Deck</span>
+                  <span className='la-pill'>自由设计</span>
+                  <span className='la-theme'>
+                    <span className='la-dot' aria-hidden='true'></span>
+                    Neutral Modern
+                    <span className='la-cv' aria-hidden='true'></span>
+                  </span>
+                  <span className='la-bar-gap'></span>
+                  <button type='button' className='la-act'>
+                    <svg viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='12' rx='1.5' /><path d='M9 21h6M12 17v4' /></svg>
+                    演示<span className='la-cv' aria-hidden='true'></span>
+                  </button>
+                  <button type='button' className='la-act primary'>
+                    <svg viewBox='0 0 24 24'><path d='M12 14V4M9 7l3-3 3 3' /><path d='M6 13v5h12v-5' /></svg>
+                    分享<span className='la-cv la-cv-light' aria-hidden='true'></span>
+                  </button>
+                  <button type='button' className='la-act'>
+                    <svg viewBox='0 0 24 24'><path d='M8 6l10 6-10 6z' /></svg>
+                    交付给 Cursor<span className='la-cv' aria-hidden='true'></span>
+                  </button>
+                </div>
+                {/* body: chat transcript + deck preview */}
+                <div className='la-body'>
+                  <aside className='la-chat'>
+                    <div className='la-chat-q'>帮我做一个关于后印象派的风格…</div>
+                    <p className='la-chat-p'>第 10 页已收紧，视觉复盘现在没有低于 3 分的维度。我会再跑一轮最终文件检查。</p>
+                    <div className='la-run'>
+                      <span className='la-mono'>$</span> 运行 ×3, 完成
+                      <span className='la-run-chev'>›</span>
+                    </div>
+                    <p className='la-chat-p'>最终检查完成：12 页、12 组演讲备注、主题节奏合格、导航脚本关键项完整。我会读取最终 <code>index.html</code> 内容并作为新建 PPT artifact 交付。</p>
+                    <div className='la-bash'>
+                      <div className='la-bash-top'>
+                        <span className='la-mono'>$</span> Bash
+                        <span className='la-tag la-tag-ok'>完成</span>
+                        <span className='la-tag'>输出</span>
+                      </div>
+                      <code className='la-bash-cmd'>/bin/zsh -lc &apos;cat index.html&apos;</code>
+                    </div>
+                    <p className='la-chat-p'>已完成 <code>index.html</code>，12 页横向滑动 PPT，含塞尚重点页和每页演讲备注；已通过结构、主题节奏和脚本静态检查。</p>
+                    <div className='la-file'>
+                      <div className='la-file-head'>本轮产出的文件</div>
+                      <div className='la-file-row'>
+                        <svg viewBox='0 0 24 24'><path d='M7 3h7l4 4v14H7z' /><path d='M14 3v4h4' /></svg>
+                        <b>index.html</b>
+                        <span className='la-file-size'>30.9 KB</span>
+                        <span className='la-file-btn'>打开</span>
+                        <span className='la-file-btn'>下载</span>
+                      </div>
+                    </div>
+                    <div className='la-done'>
+                      <span className='la-done-dot' aria-hidden='true'></span>
+                      已完成 10m 33s · 24445 输出
+                    </div>
+                    <div className='la-composer'>描述你想生成的内容…</div>
+                  </aside>
+                  <div className='la-doc'>
+                    <div className='la-doc-tabs'>
+                      <span className='la-doc-tab'>
+                        <svg viewBox='0 0 24 24'><rect x='4' y='4' width='7' height='7' /><rect x='13' y='4' width='7' height='7' /><rect x='4' y='13' width='7' height='7' /><rect x='13' y='13' width='7' height='7' /></svg>
+                        设计文件
+                      </span>
+                      <span className='la-doc-tab is-active'>
+                        <svg viewBox='0 0 24 24'><path d='M7 3h7l4 4v14H7z' /><path d='M14 3v4h4' /></svg>
+                        index.html
+                        <svg className='la-x' viewBox='0 0 24 24'><path d='M7 7l10 10M17 7L7 17' /></svg>
+                      </span>
+                    </div>
+                    <div className='la-doc-bar'>
+                      <span className='la-seg'>预览<span className='la-cv' aria-hidden='true'></span></span>
+                      <span className='la-seg'>桌面端<span className='la-cv' aria-hidden='true'></span></span>
+                      <span className='la-seg'>100%<span className='la-cv' aria-hidden='true'></span></span>
+                      <span className='la-page'>‹ 1 / 12 ›</span>
+                      <span className='la-bar-gap'></span>
+                      <span className='la-tool'>Themes</span>
+                      <span className='la-tool'>绘制</span>
+                      <span className='la-tool'>评论</span>
+                      <span className='la-tool'>注释</span>
+                      <span className='la-tool'>截屏</span>
+                    </div>
+                    <div className='la-slide' data-lab-preview>
+                      <LazyImg className='la-slide-img' src={labActive} />
+                      <span className='la-slide-page'>1 / 12</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/* Labs filter as a centered macOS-style magnifying Dock (React
+                Bits "Dock", reproduced in vanilla for this SSR/no-React
+                page). Proximity magnification is driven by the enhancer in
+                `pages/index.astro`; the hover label is pure CSS. Icons are
+                from the skill's Remix Icon font (line style). */}
+            <div className='lab-dock' data-lab-dock data-reveal>
+              {[
+                { label: 'Prototype', href: href('/skills/mode/prototype/') },
+                { label: 'Live Artifact', href: href('/skills/') },
+                { label: 'Slides', href: href('/skills/mode/deck/') },
+                { label: '图片', href: href('/skills/') },
+                { label: 'HyperFrames', href: href('/skills/') },
+                { label: '视频', href: href('/skills/') },
+              ].map((item, i) => (
+                <a
+                  key={item.label}
+                  className={i === 0 ? 'lab-dock-item active' : 'lab-dock-item'}
+                  href={item.href}
+                  data-dock-item
+                  data-preview-src={labArtifacts[i % labArtifacts.length] ?? labActive}
+                  data-preview-title={item.label}
+                  aria-label={item.label}
+                >
+                  <span className='lab-dock-icon' aria-hidden='true'></span>
+                  <span className='lab-dock-label'>{item.label}</span>
+                </a>
               ))}
             </div>
-            <div className='labs-foot'>
-              <div className='progress'>
-                <span className='on' />
-                <span className='on' />
-                <span className='on' />
-                <span className='on' />
-                <span className='on' />
-                <span />
-                <span />
-                <span />
-              </div>
-              <span className='meta'>
-                {home.labs.foot(skills)}
-                {NBSP}·{NBSP}
-                <a
-                  href={href('/skills/')}
-                  className='library-link'
-                  style={{ color: 'var(--coral)' }}
-                >
-                  {home.labs.viewLibrary}
-                </a>
-              </span>
-            </div>
+            </div>{/* /lab-stage */}
           </div>
         </section>
 
         {/* ====== METHOD ====== */}
         <section className='method' data-od-id='method'>
           <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>IV.</span>
-              <span className='meta-grp'>
-                <span>{home.method.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.method.stages}</span>
-              </span>
-              <span>005 / 008</span>
-            </div>
             <div className='method-head'>
               <div data-reveal>
-                <span className='label'>
-                  {home.method.label} <span className='ix'>· Nº 05</span>
-                </span>
-                <h2 className='display' style={{ marginTop: 30 }}>
-                  {home.method.titlePrefix} <em>{home.method.titleEmphasis}</em>{' '}
-                  {home.method.titleSuffix}
-                  <span className='dot'>.</span>
+                {locale !== 'zh' ? (
+                  <span className='label'>
+                    {home.method.label} <span className='ix'>· Nº 05</span>
+                  </span>
+                ) : null}
+                <h2 className='display' style={{ marginTop: locale === 'zh' ? 0 : 30 }}>
+                  {locale === 'zh' ? (
+                    '接入 16+ Coding Agent，零配置'
+                  ) : (
+                    <>
+                      {home.method.titlePrefix} <em>{home.method.titleEmphasis}</em>{' '}
+                      {home.method.titleSuffix}
+                      <span className='dot'>.</span>
+                    </>
+                  )}
                 </h2>
               </div>
               <div className='right' data-reveal='right'>
@@ -878,56 +739,123 @@ export default function Page({
                 <p>{home.method.lead}</p>
               </div>
             </div>
-            <div className='method-grid'>
-              {[
-                {
-                  num: '01',
-                  title: home.method.steps[0].title,
-                  body: home.method.steps[0].body(skills, systems),
-                  src: imageAsset('method-1.png', { width: 816, quality: 82 }),
-                },
-                {
-                  num: '02',
-                  title: home.method.steps[1].title,
-                  body: home.method.steps[1].body(skills, systems),
-                  src: imageAsset('method-2.png', { width: 816, quality: 82 }),
-                },
-                {
-                  num: '03',
-                  title: home.method.steps[2].title,
-                  body: home.method.steps[2].body(skills, systems),
-                  src: imageAsset('method-3.png', { width: 816, quality: 82 }),
-                },
-                {
-                  num: '04',
-                  title: home.method.steps[3].title,
-                  body: home.method.steps[3].body(skills, systems),
-                  src: imageAsset('method-4.png', { width: 816, quality: 82 }),
-                },
-              ].map((step) => (
-                <div className='method-step' key={step.num} data-reveal>
-                  <div className='num'>{step.num}</div>
-                  <h4>
-                    {step.title} <span className='arrow-r'>→</span>
-                  </h4>
-                  <p>{step.body}</p>
-                  <div className='img'>
-                    <LazyImg src={step.src} />
-                  </div>
+            {locale === 'zh' ? (
+              /* FallingText (React Bits, matter-js) — the coding-agent names
+                 drop into a physics playground on hover; driven by the
+                 `initFallingText` enhancer in `pages/index.astro`. Replaces the
+                 four collage images that used to sit here. */
+              <div
+                className='falling-text'
+                data-falling-text
+                data-trigger='scroll'
+                data-gravity='0.9'
+                data-stiffness='0.9'
+              >
+                <div className='falling-text-target'>
+                  {FALLING_ICONS.map((icon, index) => (
+                    <span className='falling-word falling-chip' key={`${icon.alt}-${index}`}>
+                      <img src={icon.src} alt={icon.alt} loading='lazy' decoding='async' />
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className='method-foot'>
-              <div className='left'>
-                <span className='ring' />
-                <span>{home.method.footLeft}</span>
+                <div className='falling-text-canvas' aria-hidden='true' />
               </div>
-              <div className='right'>
-                <a className='method-repo-link' href={REPO} {...ext}>
-                  <b>github.com/nexu-io/open-design</b>
-                </a>
-                {NBSP}·{NBSP}Apache-2.0
+            ) : (
+              <div className='method-grid'>
+                {[
+                  {
+                    num: '01',
+                    title: home.method.steps[0].title,
+                    body: home.method.steps[0].body(skills, systems),
+                    src: imageAsset('method-1.png', { width: 816, quality: 82 }),
+                  },
+                  {
+                    num: '02',
+                    title: home.method.steps[1].title,
+                    body: home.method.steps[1].body(skills, systems),
+                    src: imageAsset('method-2.png', { width: 816, quality: 82 }),
+                  },
+                  {
+                    num: '03',
+                    title: home.method.steps[2].title,
+                    body: home.method.steps[2].body(skills, systems),
+                    src: imageAsset('method-3.png', { width: 816, quality: 82 }),
+                  },
+                  {
+                    num: '04',
+                    title: home.method.steps[3].title,
+                    body: home.method.steps[3].body(skills, systems),
+                    src: imageAsset('method-4.png', { width: 816, quality: 82 }),
+                  },
+                ].map((step) => (
+                  <div className='method-step' key={step.num} data-reveal>
+                    <div className='num'>{step.num}</div>
+                    <h4>
+                      {step.title} <span className='arrow-r'>→</span>
+                    </h4>
+                    <p>{step.body}</p>
+                    <div className='img'>
+                      <LazyImg src={step.src} />
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
+          </div>
+        </section>
+
+        {/* ====== TESTIMONIAL / COLLABORATORS ====== */}
+        <section className='testimonial' data-od-id='testimonial'>
+          <div className='container'>
+            <div className={`testimonial-grid${locale === 'zh' ? ' with-globe' : ''}`}>
+              <div className='testimonial-copy' data-reveal>
+                {locale !== 'zh' ? (
+                  <span className='label'>
+                    {home.testimonial.label} <span className='ix'>· Nº 06</span>
+                  </span>
+                ) : null}
+                <h2 style={{ marginTop: 30 }}>
+                  {home.testimonial.quote}
+                </h2>
+                {locale === 'zh' ? (
+                  <a
+                    className='btn btn-ghost'
+                    href={REPO_CONTRIBUTORS}
+                    style={{ marginTop: 28 }}
+                    {...ext}
+                  >
+                    查看全部贡献者
+                    <span className='arrow'>{arrowOut}</span>
+                  </a>
+                ) : (
+                  <a className='read-more' href={REPO} {...ext}>
+                    {home.testimonial.readMore}
+                  </a>
+                )}
+              </div>
+              {locale === 'zh' ? (
+                <div className='testimonial-globe' data-reveal='right' data-testimonial-globe>
+                  <canvas
+                    aria-label='Open Design global contributor map'
+                    className='testimonial-globe-canvas'
+                    height={720}
+                    width={720}
+                  />
+                  {/* Contributor avatars orbiting the globe (no spokes). The
+                      ring spins; each avatar counter-spins to stay upright.
+                      Populated client-side from the GitHub contributors API
+                      by `enhanceContributorOrbit` in pages/index.astro. */}
+                  <div
+                    className='contributor-orbit'
+                    data-contributor-orbit
+                    aria-hidden='true'
+                  />
+                </div>
+              ) : (
+                <div className='testimonial-art' data-reveal='right'>
+                  <LazyImg src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} />
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -935,69 +863,95 @@ export default function Page({
         {/* ====== SELECTED WORK ====== */}
         <section className='tight' data-od-id='work'>
           <div className='work'>
-            <div className='work-rule'>
-              <span className='roman'>V.</span>
-              <span style={{ display: 'inline-flex', gap: 24 }}>
-                <span>{home.work.rule}</span>
-                <span style={{ color: 'var(--coral)' }}>•</span>
-                <span>{home.work.editedBy}</span>
-              </span>
-              <span>006 / 008</span>
-            </div>
-            <div className='work-grid'>
-              <div className='work-copy' data-reveal>
-                <span className='label'>{home.work.label}</span>
-                <h2>
-                  {home.work.titlePrefix} <em>{home.work.titleEmphasisA}</em>{' '}
-                  {home.work.titleMiddle} <em>{home.work.titleEmphasisB}</em>{' '}
-                  {home.work.titleSuffix}
-                  <span className='dot'>.</span>
-                </h2>
-                <a className='work-link' href={href('/skills/')}>
-                  {home.work.viewAll(skills)}
+            {locale === 'zh' ? (
+              <div className='work-stats-grid' data-reveal>
+                {[
+                  { src: 'card-1.png', num: '52K+', to: '52', suffix: 'K+', alt: 'GitHub Stars', href: REPO },
+                  { src: 'card-2.png', num: '280+', to: '280', suffix: '+', alt: '贡献者', href: `${REPO}/graphs/contributors` },
+                  { src: 'card-3.png', num: '217+', to: '217', suffix: '+', alt: 'Plugins', href: href('/plugins/') },
+                  { src: 'card-4.png', num: '129+', to: '129', suffix: '+', alt: 'Design Systems', href: href('/systems/') },
+                  { src: 'card-5.png', num: '16', to: '16', suffix: '', alt: 'Coding Agent 支持', href: REPO },
+                  { src: 'card-6.png', num: null, to: null, suffix: '', alt: 'Star us', href: REPO, cta: true },
+                ].map((item, index) => (
+                  <a
+                    className={`work-stat-card work-img-card${item.cta ? ' work-stat-card-cta' : ''}`}
+                    href={item.href}
+                    key={item.src}
+                    style={{ '--tilt': `${[-1.2, 1.4, -0.6, 0.9, -1, 1.1][index]}deg` } as React.CSSProperties}
+                    {...(item.href.startsWith('http') ? ext : {})}
+                  >
+                    <LazyImg src={`/work-cards/${item.src}`} alt={item.alt} />
+                    <h3 className='work-stat-overlay'>
+                      {item.num ? (
+                        <span
+                          data-countup
+                          data-countup-to={item.to}
+                          data-countup-suffix={item.suffix}
+                        >
+                          {item.num}
+                        </span>
+                      ) : null}
+                      <em>{item.alt}</em>
+                    </h3>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className='work-grid'>
+                <div className='work-copy' data-reveal>
+                  <span className='label'>{home.work.label}</span>
+                  <h2>
+                    {home.work.titlePrefix} <em>{home.work.titleEmphasisA}</em>{' '}
+                    {home.work.titleMiddle} <em>{home.work.titleEmphasisB}</em>{' '}
+                    {home.work.titleSuffix}
+                    <span className='dot'>.</span>
+                  </h2>
+                  <a className='work-link' href={href('/skills/')}>
+                    {home.work.viewAll(skills)}
+                  </a>
+                </div>
+                <a
+                  className='work-card'
+                  data-reveal
+                  href={`${REPO_SKILLS}/guizang-ppt`}
+                  {...ext}
+                >
+                  <div className='label-row'>
+                    <span className='small-label'>{home.work.cards[0].label}</span>
+                    <span className='index'>01 / {skills}</span>
+                  </div>
+                  <h3>{home.work.cards[0].title}</h3>
+                  <p>{home.work.cards[0].body}</p>
+                  <div className='img'>
+                    <LazyImg src={imageAsset('work-1.png', { width: 768, quality: 82 })} />
+                  </div>
+                  <div className='meta-row'>
+                    <span className='year'>{home.work.cards[0].metaLeft}</span>
+                    <span>{home.work.cards[0].metaRight}</span>
+                  </div>
+                </a>
+                <a
+                  className='work-card alt'
+                  data-reveal
+                  href={href('/skills/')}
+                >
+                  <div className='label-row'>
+                    <span className='small-label'>{home.work.cards[1].label}</span>
+                    <span className='index'>02 / {skills}</span>
+                  </div>
+                  <h3>{home.work.cards[1].title}</h3>
+                  <p>{home.work.cards[1].body}</p>
+                  <div className='img'>
+                    <LazyImg src={imageAsset('work-2.png', { width: 768, quality: 82 })} />
+                  </div>
+                  <div className='meta-row'>
+                    <span className='year'>{home.work.cards[1].metaLeft}</span>
+                    <span>{home.work.cards[1].metaRight}</span>
+                  </div>
                 </a>
               </div>
-              <a
-                className='work-card'
-                data-reveal
-                href={`${REPO_SKILLS}/guizang-ppt`}
-                {...ext}
-              >
-                <div className='label-row'>
-                  <span className='small-label'>{home.work.cards[0].label}</span>
-                  <span className='index'>01 / {skills}</span>
-                </div>
-                <h3>{home.work.cards[0].title}</h3>
-                <p>{home.work.cards[0].body}</p>
-                <div className='img'>
-                  <LazyImg src={imageAsset('work-1.png', { width: 768, quality: 82 })} />
-                </div>
-                <div className='meta-row'>
-                  <span className='year'>{home.work.cards[0].metaLeft}</span>
-                  <span>{home.work.cards[0].metaRight}</span>
-                </div>
-              </a>
-              <a
-                className='work-card alt'
-                data-reveal
-                href='https://github.com/tw93/kami'
-                {...ext}
-              >
-                <div className='label-row'>
-                  <span className='small-label'>{home.work.cards[1].label}</span>
-                  <span className='index'>04 / {systems}</span>
-                </div>
-                <h3>{home.work.cards[1].title}</h3>
-                <p>{home.work.cards[1].body}</p>
-                <div className='img'>
-                  <LazyImg src={imageAsset('work-2.png', { width: 768, quality: 82 })} />
-                </div>
-                <div className='meta-row'>
-                  <span className='year'>{home.work.cards[1].metaLeft}</span>
-                  <span>{home.work.cards[1].metaRight}</span>
-                </div>
-              </a>
-            </div>
+            )}
+            {locale !== 'zh' ? (
             <div className='work-arrows'>
               <button type='button' className='nav-btn'>
                 <svg
@@ -1024,223 +978,27 @@ export default function Page({
                 </svg>
               </button>
             </div>
-          </div>
-        </section>
-
-        {/* ====== TESTIMONIAL / COLLABORATORS ====== */}
-        <section className='testimonial' data-od-id='testimonial'>
-          <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>VI.</span>
-              <span className='meta-grp'>
-                <span>{home.testimonial.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.testimonial.shoulders}</span>
-              </span>
-              <span>007 / 008</span>
-            </div>
-            <div className='testimonial-grid'>
-              <div className='testimonial-copy' data-reveal>
-                <span className='label'>
-                  {home.testimonial.label} <span className='ix'>· Nº 06</span>
-                </span>
-                <h2 style={{ marginTop: 30 }}>
-                  {home.testimonial.quote}
-                </h2>
-                <div className='author'>
-                  <span className='avatar'>m</span>
-                  <p>
-                    {home.testimonial.authorName}
-                    <br />
-                    <span>{home.testimonial.authorTitle}</span>
-                  </p>
-                </div>
-                <div className='divider' />
-                <p className='partners-text'>
-                  {home.testimonial.partnersText}
-                </p>
-                <div className='partners'>
-                  <a
-                    className='partner'
-                    data-reveal
-                    href={LINEAGE['huashu-design']}
-                    {...ext}
-                  >
-                    <div className='glyph'>
-                      <svg
-                        viewBox='0 0 80 30'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                      >
-                        <path d='M5 24L20 6L35 24M12 18h16' />
-                      </svg>
-                    </div>
-                    <span>huashu-design</span>
-                    <small>{home.testimonial.partnerLabels[0]}</small>
-                  </a>
-                  <a
-                    className='partner'
-                    data-reveal
-                    href={LINEAGE['guizang-ppt']}
-                    {...ext}
-                  >
-                    <div className='glyph'>
-                      <svg
-                        viewBox='0 0 80 30'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                      >
-                        <path d='M8 24L20 6L24 22L36 4' />
-                      </svg>
-                    </div>
-                    <span>guizang-ppt</span>
-                    <small>{home.testimonial.partnerLabels[1]}</small>
-                  </a>
-                  <a
-                    className='partner'
-                    data-reveal
-                    href={LINEAGE['open-codesign']}
-                    {...ext}
-                  >
-                    <div className='glyph'>
-                      <svg
-                        viewBox='0 0 80 30'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                      >
-                        <circle cx='15' cy='15' r='9' />
-                        <path d='M15 6v18M6 15h18' />
-                      </svg>
-                    </div>
-                    <span>open-codesign</span>
-                    <small>{home.testimonial.partnerLabels[2]}</small>
-                  </a>
-                  <a
-                    className='partner'
-                    data-reveal
-                    href={LINEAGE['devin-cli']}
-                    {...ext}
-                  >
-                    <div className='glyph'>
-                      <svg
-                        viewBox='0 0 80 30'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                      >
-                        <path d='M5 8l9 7-9 7M20 24h18' />
-                      </svg>
-                    </div>
-                    <span>Devin CLI</span>
-                    <small>{home.testimonial.partnerLabels[3]}</small>
-                  </a>
-                  <a
-                    className='partner'
-                    data-reveal
-                    href={LINEAGE['hyperframes']}
-                    {...ext}
-                  >
-                    <div className='glyph'>
-                      <svg
-                        viewBox='0 0 80 30'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='2'
-                      >
-                        <rect x='4' y='5' width='22' height='18' />
-                        <rect x='14' y='9' width='22' height='18' />
-                      </svg>
-                    </div>
-                    <span>hyperframes</span>
-                    <small>{home.testimonial.partnerLabels[4]}</small>
-                  </a>
-                </div>
-                <a className='read-more' href={REPO} {...ext}>
-                  {home.testimonial.readMore}
-                </a>
-              </div>
-              <div className='testimonial-art' data-reveal='right'>
-                <LazyImg src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ====== FAQ ======
-         *
-         * Visible answers — kept in lockstep with the FAQPage JSON-LD
-         * defined in `app/pages/index.astro`. Each entry mirrors the
-         * `q`/`a` pair, so the structured data describes content the
-         * user actually sees (Google's rich-result eligibility rule).
-         */}
-        <section className='faq' id='faq' data-od-id='faq'>
-          <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>VI·5.</span>
-              <span className='meta-grp'>
-                <span>{home.faqSection.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.faqSection.answers}</span>
-              </span>
-              <span>{`00${faq.length}`.slice(-3)} / 008</span>
-            </div>
-            <div className='faq-head' data-reveal>
-              <span className='label'>
-                {home.faqSection.label} <span className='ix'>· Nº 06.5</span>
-              </span>
-              <h2 className='display'>
-                {home.faqSection.titlePrefix} <em>Open Design</em>,{' '}
-                <em>OpenDesign</em>, {home.faqSection.titleMiddle}{' '}
-                <em>{home.faqSection.titleSuffix}</em>
-                <span className='dot'>.</span>
-              </h2>
-            </div>
-            <ol className='faq-list'>
-              {faq.map(({ q, a }, idx) => (
-                <li className='faq-item' key={q} data-reveal>
-                  <details>
-                    <summary>
-                      <span className='faq-index'>
-                        {String(idx + 1).padStart(2, '0')}
-                      </span>
-                      <span className='faq-q'>{q}</span>
-                      <span className='faq-toggle' aria-hidden='true'>
-                        +
-                      </span>
-                    </summary>
-                    <p className='faq-a'>{a}</p>
-                  </details>
-                </li>
-              ))}
-            </ol>
+            ) : null}
           </div>
         </section>
 
         {/* ====== CTA ====== */}
         <section className='cta' id='contact' data-od-id='cta'>
           <div className='container'>
-            <div className='sec-rule'>
-              <span className='roman'>VII.</span>
-              <span className='meta-grp'>
-                <span>{home.cta.rule}</span>
-                <span className='dot-mark'>•</span>
-                <span>{home.cta.command}</span>
-              </span>
-              <span>008 / 008</span>
-            </div>
-            <div className='cta-grid'>
-              <div data-reveal>
-                <span className='label'>
-                  {home.cta.label} <span className='ix'>· Nº 07</span>
-                </span>
+            <div className='cta-dance' data-reveal>
+              <LazyImg src='/cta-dance.webp' alt='' className='cta-dance-img' />
+              <div className='cta-dance-inner'>
                 <h2 className='display'>
-                  {home.cta.titlePrefix} <em>{home.cta.titleOpen}</em>{' '}
-                  {home.cta.titleMiddle} <em>{home.cta.titleVisual}</em>{' '}
-                  {home.cta.titleSuffix}
-                  <span className='dot'>.</span>
+                  {locale === 'zh' ? (
+                    home.cta.titlePrefix
+                  ) : (
+                    <>
+                      {home.cta.titlePrefix} <em>{home.cta.titleOpen}</em>{' '}
+                      {home.cta.titleMiddle} <em>{home.cta.titleVisual}</em>{' '}
+                      {home.cta.titleSuffix}
+                      <span className='dot'>.</span>
+                    </>
+                  )}
                 </h2>
                 <p className='lead'>{home.cta.lead}</p>
                 <div className='cta-actions'>
@@ -1253,23 +1011,56 @@ export default function Page({
                     <span className='arrow-circle'>→</span>
                   </a>
                 </div>
-                <div className='cta-foot'>
-                  <span className='stamp'>● {home.cta.live}</span>
-                  <span>
-                    <span data-github-version>{github.versionLabel}</span> / Apache-2.0
-                  </span>
-                  <span style={{ marginLeft: 'auto' }}>
-                    52.5200° N · 13.4050° E
-                  </span>
-                </div>
               </div>
-              <div className='cta-art' data-reveal='right'>
-                <LazyImg src={imageAsset('cta.png', { width: 1024, quality: 82 })} />
-                <div className='index'>Nº 08</div>
-                <div className='ribbon'>
-                  {home.cta.ribbon}
-                </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ====== FAQ ======
+         *
+         * Visible answers — kept in lockstep with the FAQPage JSON-LD
+         * defined in `app/pages/index.astro`. Each entry mirrors the
+         * `q`/`a` pair, so the structured data describes content the
+         * user actually sees (Google's rich-result eligibility rule).
+        */}
+        <section className='faq' id='faq' data-od-id='faq'>
+          <div className='container'>
+            <div className='faq-layout'>
+              <div className='faq-head' data-reveal>
+                {locale === 'zh' ? (
+                  <h2 className='display'>常见问题</h2>
+                ) : (
+                  <>
+                    <span className='label'>
+                      {home.faqSection.label} <span className='ix'>· Nº 06.5</span>
+                    </span>
+                    <h2 className='display'>
+                      {home.faqSection.titlePrefix} <em>Open Design</em>,{' '}
+                      <em>OpenDesign</em>, {home.faqSection.titleMiddle}{' '}
+                      <em>{home.faqSection.titleSuffix}</em>
+                      <span className='dot'>.</span>
+                    </h2>
+                  </>
+                )}
               </div>
+              <ol className='faq-list'>
+                {faq.map(({ q, a }, idx) => (
+                  <li className='faq-item' key={q} data-reveal>
+                    <details>
+                      <summary>
+                        <span className='faq-index'>
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <span className='faq-q'>{q}</span>
+                        <span className='faq-toggle' aria-hidden='true'>
+                          +
+                        </span>
+                      </summary>
+                      <p className='faq-a'>{a}</p>
+                    </details>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </section>
@@ -1280,10 +1071,13 @@ export default function Page({
             <div className='foot-grid'>
               <div className='foot-brand'>
                 <a href='#top' className='brand'>
-                  <span className='brand-mark'>
-                    <img src='/logo.webp' alt='' width={44} height={44} />
-                  </span>
-                  <span className='brand-name'>Open Design</span>
+                  <img
+                    className='brand-logo'
+                    src='/logo-lockup.svg'
+                    alt='Open Design'
+                    width={225}
+                    height={83}
+                  />
                 </a>
                 <p style={{ marginTop: 18 }}>
                   {home.footer.summary}
@@ -1300,6 +1094,44 @@ export default function Page({
                   </span>
                 </a>
               </div>
+              {locale === 'zh' ? (
+                <>
+                  <div className='foot-col'>
+                    <h5>产品</h5>
+                    <ul>
+                      <li><a href={REPO_RELEASES} {...ext}>Download</a></li>
+                      <li><a href={href('/plugins/')}>Plugins</a></li>
+                      <li><a href={href('/systems/')}>Design Systems</a></li>
+                      <li><a href={href('/blog/')}>Blog</a></li>
+                    </ul>
+                  </div>
+                  <div className='foot-col'>
+                    <h5>社区</h5>
+                    <ul>
+                      <li><a href={REPO} {...ext}>GitHub</a></li>
+                      <li><a href={DISCORD} {...ext}>Discord</a></li>
+                      <li><a href='https://x.com/nexudotio' {...ext}>X (@nexudotio)</a></li>
+                      <li><a href='https://www.youtube.com/' {...ext}>Youtube</a></li>
+                      <li><a href='https://www.bilibili.com/' {...ext}>Bilibili</a></li>
+                    </ul>
+                  </div>
+                  <div className='foot-col'>
+                    <h5>法律</h5>
+                    <ul>
+                      <li><a href={`${REPO}/blob/main/LICENSE`} {...ext}>Apache-2.0 License</a></li>
+                      <li><a href={href('/privacy/')}>Privacy</a></li>
+                      <li><a href={href('/terms/')}>Terms</a></li>
+                    </ul>
+                  </div>
+                  <div className='foot-col'>
+                    <h5>伙伴</h5>
+                    <ul>
+                      <li><a href='https://github.com/amr' {...ext}>AMR</a></li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <>
               <div className='foot-col'>
                 <h5>{home.footer.columns.studio}</h5>
                 <ul>
@@ -1328,33 +1160,6 @@ export default function Page({
                     <a href={href('/skills/')}>
                       {home.footer.libraryLinks.skills(skills)}
                     </a>
-                  </li>
-                  <li>
-                    <a href={href('/systems/')}>
-                      {home.footer.libraryLinks.systems(systems)}
-                    </a>
-                  </li>
-                  <li>
-                    <a href={href('/templates/')}>
-                      {home.footer.libraryLinks.templates}
-                    </a>
-                  </li>
-                  <li>
-                    <a href={href('/craft/')}>{home.footer.libraryLinks.craft}</a>
-                  </li>
-                  {/*
-                   * Sister product: HTML Anything is the agent-driven HTML
-                   * editor from the same team. Listed here as a peer to the
-                   * Open Design library facets so the home delivers a real
-                   * inline anchor link to /html-anything/ — nav-only entries
-                   * (the Product dropdown) carry less SEO weight than a body
-                   * anchor in a discoverable section like the footer. The
-                   * brand name stays in English on every locale, so we
-                   * hardcode the label rather than threading a new key
-                   * through 18 home-copy translations.
-                   */}
-                  <li>
-                    <a href='/html-anything/'>HTML Anything</a>
                   </li>
                 </ul>
               </div>
@@ -1418,17 +1223,8 @@ export default function Page({
                   </li>
                 </ul>
               </div>
-            </div>
-            <div className='foot-bottom'>
-              <span>
-                <span className='pulse' />●{' '}
-                <b style={{ color: 'var(--ink)' }}>{home.footer.bottomLeft}</b>
-              </span>
-              <span className='right'>
-                <span>{home.footer.bottomRightA}</span>
-                <span>{home.footer.bottomRightB}</span>
-                <span style={{ color: 'var(--coral)' }}>♥ MMXXVI</span>
-              </span>
+                </>
+              )}
             </div>
             <div className='foot-mega'>
               <div className='word' data-reveal='rise-lg'>
@@ -1448,6 +1244,21 @@ export default function Page({
           </div>
         </footer>
       </div>
+      {/*
+        Page-level progressive Gaussian blur pinned to the bottom edge
+        (React Bits "Gradual Blur", SSR port). Restores the backdrop blur
+        that a plain `.page-bottom-fade` white gradient had replaced.
+      */}
+      <GradualBlur
+        target='page'
+        position='bottom'
+        height='8rem'
+        strength={5}
+        divCount={10}
+        opacity={1}
+        curve='linear'
+        exponential
+      />
     </>
   );
 }

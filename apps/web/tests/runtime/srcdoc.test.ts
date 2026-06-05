@@ -37,6 +37,40 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('captures snapshots as a fixed viewport instead of offsetting the foreignObject', () => {
+    const srcdoc = buildSrcdoc('<main style="height:2000px">Hero</main>');
+
+    expect(srcdoc).toContain('<foreignObject x="0" y="0" width="');
+    expect(srcdoc).toContain('transform:translate(');
+    expect(srcdoc).toContain('transform-origin:0 0!important');
+    expect(srcdoc).toContain('function snapshotViewport(raw)');
+    expect(srcdoc).toContain('function appendSnapshotOverlay(clone, overlayHtml, overlayCss, sx, sy, cropX, cropY, w, h)');
+    expect(srcdoc).toContain('function inlineOverlayComputedStyles(source, target)');
+    expect(srcdoc).toContain('od-snapshot-overlay-layer');
+    expect(srcdoc).toContain('viewport: data.viewport || null');
+    expect(srcdoc).toContain(' + cropX');
+    expect(srcdoc).toContain(' + cropY');
+    expect(srcdoc).toContain("if (tag === 'html' || tag === 'body') continue");
+    expect(srcdoc).not.toContain('<foreignObject x="\' + (-(window.scrollX||0))');
+    expect(srcdoc).not.toContain('y="\' + (-(window.scrollY||0))');
+  });
+
+  it('routes annotate screenshot capture through the host snapshot bridge', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>', {
+      annotateBridge: true,
+    });
+
+    expect(srcdoc).toContain('data-od-annotate-bridge');
+    expect(srcdoc).toContain('function inlineOverlayStyle(n,c)');
+    expect(srcdoc).toContain("c.style.position='absolute'");
+    expect(srcdoc).toContain("c.style.left=Math.round(r.left)+'px'");
+    expect(srcdoc).toContain("function captureAnnotatable(captureId){playCaptureAnimation();try{window.parent&&window.parent.postMessage({type:'od:annotate-capture',captureId:captureId||'',overlay:overlaySnapshot()}");
+    expect(srcdoc).toContain("type==='od:annotate-trigger-capture'");
+    expect(srcdoc).toContain("captureAnnotatable(e.data.captureId||'')");
+    expect(srcdoc).toContain("toLowerCase()==='m'){e.preventDefault();e.stopPropagation();captureAnnotatable();return;}");
+    expect(srcdoc).not.toContain('getDisplayMedia');
+  });
+
   it('only uses directly mutable slide conventions for setActive support', () => {
     const srcdoc = buildSrcdoc(
       '<section class="slide">One</section><section class="slide">Two</section>',

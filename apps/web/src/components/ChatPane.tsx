@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -299,6 +299,8 @@ interface Props {
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
   composerFooterAccessory?: ReactNode;
+  composerAttachmentInbox?: ChatAttachment[];
+  onComposerAttachmentsAccepted?: (paths: string[]) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -357,6 +359,8 @@ export function ChatPane({
   byokImageModel,
   onChangeByokImageModel,
   composerFooterAccessory,
+  composerAttachmentInbox = [],
+  onComposerAttachmentsAccepted,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -376,6 +380,23 @@ export function ChatPane({
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+
+  useEffect(() => {
+    if (composerAttachmentInbox.length === 0 || tab === 'chat') return;
+    setTab('chat');
+    pinnedToBottomRef.current = true;
+  }, [composerAttachmentInbox.length, tab]);
+
+  const handleIncomingAttachmentsAccepted = useCallback((paths: string[]) => {
+    pinnedToBottomRef.current = true;
+    onComposerAttachmentsAccepted?.(paths);
+  }, [onComposerAttachmentsAccepted]);
+
+  useEffect(() => {
+    if (composerAttachmentInbox.length === 0 || tab !== 'chat') return;
+    const acceptedPaths = composerRef.current?.addUploadedAttachments?.(composerAttachmentInbox) ?? [];
+    if (acceptedPaths.length > 0) handleIncomingAttachmentsAccepted(acceptedPaths);
+  }, [composerAttachmentInbox, handleIncomingAttachmentsAccepted, tab]);
   // The user can dismiss the pinned task list once everything is complete.
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
@@ -1100,6 +1121,8 @@ export function ChatPane({
             onChangeByokImageModel={onChangeByokImageModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
+            incomingAttachments={composerAttachmentInbox}
+            onIncomingAttachmentsAccepted={handleIncomingAttachmentsAccepted}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
             footerAccessory={composerFooterAccessory}
           />

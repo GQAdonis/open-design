@@ -600,6 +600,26 @@ describe('requestPreviewSnapshot', () => {
     expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 });
   });
 
+  it('passes a host-computed visible viewport to the snapshot bridge', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 2500, {
+      viewport: { h: 640, w: 900, x: 0, y: 320 },
+    });
+
+    expect(postMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:snapshot',
+      viewport: { h: 640, w: 900, x: 0, y: 320 },
+    }), '*');
+    const { id } = postMessageMock.mock.calls[0]![0] as { id: string };
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 900, h: 640 } } as unknown as Event,
+    );
+    await promise;
+  });
+
   it('resolves null when the bridge responds with an error', async () => {
     const postMessageMock = vi.fn();
     const contentWindow = { postMessage: postMessageMock };
@@ -649,7 +669,7 @@ describe('requestPreviewSnapshot', () => {
     vi.useRealTimers();
   });
 
-  it('ignores messages from a different source window', async () => {
+  it('accepts matching snapshot ids from sandboxed source windows', async () => {
     vi.useFakeTimers();
     const postMessageMock = vi.fn();
     const contentWindow = { postMessage: postMessageMock };
@@ -658,14 +678,15 @@ describe('requestPreviewSnapshot', () => {
     const promise = requestPreviewSnapshot(iframe, 100);
     const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
 
-    // Correct id but wrong source — should be ignored
+    // Sandboxed srcdoc/lazy transport previews can report a different
+    // MessageEvent.source identity. The nonce-like snapshot id is the
+    // reliable correlation key.
     window.dispatchEvent(
       { type: 'message', source: { other: true }, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
     );
 
-    vi.advanceTimersByTime(150);
     const result = await promise;
-    expect(result).toBeNull();
+    expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 });
     vi.useRealTimers();
   });
 });

@@ -331,21 +331,48 @@ export function exportAsMd(source: string, title: string): void {
  * injected into a srcdoc preview iframe. Returns null if the bridge is not
  * present (e.g. URL-load mode) or the capture times out.
  */
+export type PreviewSnapshot = {
+  blob?: Blob;
+  dataUrl?: string;
+  h: number;
+  mime?: string;
+  w: number;
+};
+
+export type PreviewSnapshotOverlay = {
+  css?: string;
+  html?: string;
+};
+
+export type PreviewSnapshotViewport = {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+};
+
 export function requestPreviewSnapshot(
   iframe: HTMLIFrameElement,
   timeout = 2500,
-): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  options: {
+    overlay?: PreviewSnapshotOverlay | null;
+    preferSvg?: boolean;
+    skipOverlay?: boolean;
+    viewport?: PreviewSnapshotViewport | null;
+  } = {},
+): Promise<PreviewSnapshot | null> {
   const win = iframe.contentWindow;
   if (!win) return Promise.resolve(null);
   const id = `snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return new Promise((resolve) => {
     let done = false;
     function onMsg(ev: MessageEvent) {
-      if (ev.source !== win) return;
       const d = ev.data as {
         type?: string;
         id?: string;
         dataUrl?: string;
+        blob?: Blob;
+        mime?: string;
         w?: number;
         h?: number;
         error?: string;
@@ -355,11 +382,21 @@ export function requestPreviewSnapshot(
       done = true;
       window.removeEventListener('message', onMsg);
       if (d.dataUrl && d.w && d.h) resolve({ dataUrl: d.dataUrl, w: d.w, h: d.h });
-      else resolve(null);
+      else if (d.blob instanceof Blob && d.w && d.h) {
+        resolve({ blob: d.blob, mime: d.mime ?? d.blob.type, w: d.w, h: d.h });
+      }
+      else { if (d.error) console.warn('[snapshot] iframe snapshot error:', d.error); resolve(null); }
     }
     window.addEventListener('message', onMsg);
     try {
-      win.postMessage({ type: 'od:snapshot', id }, '*');
+      win.postMessage({
+        type: 'od:snapshot',
+        id,
+        overlay: options.overlay ?? null,
+        preferSvg: options.preferSvg === true,
+        skipOverlay: options.skipOverlay === true,
+        viewport: options.viewport ?? null,
+      }, '*');
     } catch {
       /* sandboxed */
     }
@@ -374,7 +411,7 @@ export function requestPreviewSnapshot(
 }
 
 /** Convert a data-URL to a Blob without re-encoding through canvas. */
-function dataUrlToBlob(dataUrl: string): Blob {
+export function dataUrlToBlob(dataUrl: string): Blob {
   if (!dataUrl.startsWith('data:')) {
     throw new Error('Invalid data URL');
   }

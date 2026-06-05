@@ -10,13 +10,13 @@ import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import LazyImg from '../../_components/lazy-img.astro';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
 import { localizeContentTag } from '../../content-i18n';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -54,7 +54,12 @@ const description = ui.plugins.detailDescription(
 const catalogCounts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
-  createElement(Header, { counts: catalogCounts, brandHref: '/', locale }),
+  createElement(Header, {
+    counts: catalogCounts,
+    brandHref: '/',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+  }),
 );
 const related = localePlugins
   .filter((item) => item.id !== plugin.id && item.registryId === plugin.registryId)
@@ -193,7 +198,6 @@ const breadcrumbJsonLd = {
 
     <div class='shell plugin-shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 

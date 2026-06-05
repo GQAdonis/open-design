@@ -28,6 +28,34 @@ afterEach(() => {
 });
 
 describe('ChatComposer /search command', () => {
+  it('stages incoming capture attachments once and acknowledges accepted paths', async () => {
+    const onAccepted = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        incomingAttachments={[
+          { path: 'uploads/screenshot-1.png', name: 'screenshot-1.png', kind: 'image', size: 12 },
+          { path: 'uploads/screenshot-1.png', name: 'screenshot-1.png', kind: 'image', size: 12 },
+        ]}
+        onIncomingAttachmentsAccepted={onAccepted}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('screenshot-1.png')).toBeTruthy());
+    expect(screen.getAllByText('screenshot-1.png')).toHaveLength(1);
+    expect(screen.getByTestId('staged-attachments').closest('.composer-input-wrap')).toBeTruthy();
+    await waitFor(() => expect(onAccepted).toHaveBeenCalledWith([
+      'uploads/screenshot-1.png',
+      'uploads/screenshot-1.png',
+    ]));
+  });
+
   it('sends staged file attachments even when the text draft is empty', async () => {
     const onSend = vi.fn();
     mockedUploadProjectFiles.mockResolvedValue({

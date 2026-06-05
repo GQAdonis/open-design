@@ -215,7 +215,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
     openDesignName: 'Open Design',
-    openDesignBlurb: 'Agent 原生设计工作台：Skill、设计系统、模板。',
+    openDesignBlurb: 'Agent 原生设计工作台：围绕 SKILL.md 工作流组织。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
     tutorialsName: '教程',
@@ -1505,7 +1505,7 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   zh: {
     title: 'Open Design —— 官方 Claude Design 开源替代',
     description:
-      'Open Design 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页、仪表盘和品牌系统，背后由 {skills} 个可组合 Skill 与 {systems} 套 DESIGN.md 系统驱动。',
+      'Open Design 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
   },
   'zh-tw': {
     title: 'Open Design —— 官方 Claude Design 開源替代',
@@ -1652,7 +1652,7 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   zh: [
     {
       q: 'Open Design 是什么？',
-      a: 'Open Design 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 Skill 与可移植 DESIGN.md 系统驱动。',
+      a: 'Open Design 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 SKILL.md 工作流驱动。',
     },
     {
       q: 'Open Design 是官方项目吗？',
@@ -1661,7 +1661,7 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '它和 Claude Design 有什么不同？',
-      a: 'Claude Design 是绑定单一厂商的云端产品。Open Design 本地优先、Apache-2.0 开源，并且 BYOK：你使用自己的 Agent、密钥和 DESIGN.md 设计系统。',
+      a: 'Claude Design 是绑定单一厂商的云端产品。Open Design 本地优先、Apache-2.0 开源，并且 BYOK：你使用自己的 Agent、密钥和 Skill 规则。',
     },
     {
       q: 'Open Design 可以本地运行吗？',
@@ -1673,7 +1673,7 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '可以自托管或 fork 吗？',
-      a: '可以。代码采用 Apache-2.0 协议，你可以 fork 仓库、编辑 Skill、添加自己的 DESIGN.md 系统，或在自己的机器上运行 daemon。',
+      a: '可以。代码采用 Apache-2.0 协议，你可以 fork 仓库、编辑 Skill、加入自己的 reference 规则，或在自己的机器上运行 daemon。',
     },
   ],
   'zh-tw': [
@@ -2391,7 +2391,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
   zh: {
     rail: {
       right: 'Open Design — 第 01 卷 · 第 26 期 · Apache-2.0',
-      left: 'Skills · 设计系统 · Agents · BYOK · 本地优先',
+      left: 'Skills · UIUX Design · Agents · BYOK · 本地优先',
     },
     hero: {
       discordAria: '加入 Open Design Discord',
@@ -2402,16 +2402,16 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       titleEmphasis: 'Claude Design',
       titleMiddle: '运行在',
       titleSecondEmphasis: '你自己的 Agent 上',
-      lead: (skills, systems) =>
-        `Open Design 是官方、本地优先的 Claude Design 替代方案。你现有的编码 Agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 会变成设计引擎，并由 ${skills} 个可组合 Skill 与 ${systems} 套可移植 DESIGN.md 系统驱动。`,
-      star: '在 GitHub 点 Star',
+      lead: (skills) =>
+        `Open Design 是官方、本地优先的 Claude Design 替代方案。你现有的编码 Agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 会变成设计引擎，并由 ${skills} 个可组合 SKILL.md 工作流驱动。`,
+      star: 'Download',
       download: '下载桌面端',
       plate: '图版 Nº 08',
       composedIn: '由',
       stats: [
         { strong: 'Skill', text: '可交付' },
-        { strong: '系统', text: '可移植' },
-        { strong: 'CLI', text: '自带 Agent' },
+        { strong: '规范', text: '已内置' },
+        { strong: 'Agent', text: '本地执行' },
       ],
       foot: 'pnpm tools-dev · 3 条命令启动',
       index: ['检测', '发现', '指挥', '交付'],
@@ -2443,33 +2443,32 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       practice: '研究 · 设计 · 工程 · 循环',
       stampTop: '工作室实践',
       stampBottom: '始于 MMXXVI',
-      sideNote: ['从模型行为', '到视觉品味，', '我们原型化', '完整的创意', '系统栈。'],
+      sideNote: ['从模型行为', '到视觉品味，', '我们原型化', '完整的创意', '工作流。'],
       caption: '形式 · 感知 · 机器想象力研究。（Open Design，MMXXVI）',
     },
     capabilities: {
-      rule: '能力 · Skill · 系统',
+      rule: '能力 · Skill · 规范',
       surfaces: '4 个表面 / 1 个循环',
       ribbon: 'OPEN DESIGN · 能力矩阵 · OD/26',
       label: '能力',
-      titlePrefix: 'Skill、系统与界面',
+      titlePrefix: 'Skill、规范与界面',
       titleEmphasis: '服务于创意',
       titleSuffix: '智能',
-      lead:
-        '我们把人的品味与你已经信任的 Agent 结合起来，用来交付界面、演示文稿和编辑型页面，让产物显得有意图、有表达、也有生命力。',
+      lead: 'Brief → 模板 → 视觉方向 → Artifact → 记忆沉淀',
       cards: [
         {
           tag: 'Skills',
-          title: 'Skill，\n不是插件',
-          body: (skills) =>
-            `${skills} 个基于文件的 SKILL.md 包。把文件夹放进去，重启 daemon，它就会出现。`,
+          title: '选择起点',
+          body: () =>
+            '一句话描述目标，或从模板 / Plugin 直接选起点。',
           aria: '在 GitHub 浏览全部 Skill',
         },
         {
-          tag: 'Systems',
-          title: '用 Markdown\n描述设计系统',
-          body: (_skills, systems) =>
-            `${systems} 套可移植 DESIGN.md 系统 —— Linear、Vercel、Stripe、Apple、Cursor、Figma……`,
-          aria: '在 GitHub 浏览全部设计系统',
+          tag: 'References',
+          title: '颜色字体\n间距布局',
+          body: () =>
+            '颜色、字体、间距、布局、图标 5 类 reference 都来自 UIUX-design skill，页面内容只按这些规则组织。',
+          aria: '浏览 Skill reference',
         },
         {
           tag: 'Adapters',
@@ -2526,8 +2525,8 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
         },
         {
           badge: '运行时',
-          title: '柔性系统',
-          body: '沙盒 iframe 预览、流式 todo、真实 cwd 文件系统，以及人和机器之间的自适应循环。',
+          title: '柔性运行时',
+          body: '沙盒 iframe 预览、流式 todo、真实 cwd 文件读写，以及人和机器之间的自适应循环。',
         },
       ],
       foot: (skills) => `05 / ${skills} 个 SKILL`,
@@ -2540,13 +2539,14 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       label: '方法',
       titlePrefix: '从',
       titleEmphasis: '信号',
-      titleSuffix: '到系统',
-      lead: '每个阶段都是迭代式、视觉化、研究驱动的 —— 用可组合文件，而不是不透明提示词。',
+      titleSuffix: '到规则',
+      lead:
+        '自动检测 PATH 上已安装的 CLI，也支持任何 OpenAI / Azure / Google 兼容端点通过 BYOK 代理接入',
       steps: [
         {
           title: '检测',
-          body: (skills, systems) =>
-            `daemon 会扫描你的 $PATH，寻找 12 个编码 Agent，并在启动时自动加载 ${skills} 个 Skill + ${systems} 套系统。`,
+          body: (skills) =>
+            `daemon 会扫描你的 $PATH，寻找 12 个编码 Agent，并在启动时自动加载 ${skills} 个 Skill。`,
         },
         {
           title: '发现',
@@ -2564,7 +2564,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
             'Agent 写入磁盘，你在沙盒 iframe 里预览，并导出 HTML / PDF / PPTX / ZIP / Markdown。',
         },
       ],
-      footLeft: 'Skill 告诉系统该做什么。文件让结果变成真实。',
+      footLeft: 'Skill 告诉 Agent 该做什么。文件让结果变成真实。',
     },
     work: {
       rule: '精选作品 · 2026 目录',
@@ -2585,11 +2585,11 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
           metaRight: '默认',
         },
         {
-          label: '配套系统',
-          title: 'kami',
-          body: '一个编辑纸张系统。温暖羊皮纸画布、墨蓝强调色、以衬线字体驱动的层级 —— 从设计上支持多语言（EN · zh-CN · ja）。',
-          metaLeft: '2026 · 纸张',
-          metaRight: '系统',
+          label: '本地 Skill',
+          title: 'UIUX-design',
+          body: '来自 skills01 的 UI/UX 规范：只使用指定颜色、Albert Sans 字体、Remix Icon、间距 token 与稳定布局规则。',
+          metaLeft: '2026 · UIUX',
+          metaRight: 'Skill',
         },
       ],
     },
@@ -2597,7 +2597,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       rule: '协作者 / 来源脉络',
       shoulders: '站在前人的肩膀上',
       label: '协作者',
-      quote: '“Open Design 帮我们把模糊的 AI 想法变成了一个视觉系统：锋利、可信，而且真的有新意。”',
+      quote: '来自全球，100+ 贡献者正在一起构建 Open Design',
       authorName: 'Mina Kovac',
       authorTitle: '创意总监 · North Form',
       partnersText: '站在那些持续交付开源设计文化的团队肩膀上。',
@@ -2616,15 +2616,14 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       rule: '联系 / 对话',
       command: '三条命令开始交付',
       label: '开始对话',
-      titlePrefix: '一起构建一些',
-      titleOpen: '开放',
-      titleMiddle: '而且',
-      titleVisual: '视觉上',
-      titleSuffix: '难忘的东西',
-      lead:
-        '在 GitHub 点 Star，进入 issues，或者今晚运行 pnpm tools-dev。三条命令，这个循环就属于你。',
+      titlePrefix: '让最前沿的 AI 设计能力回到每一个创作者的桌上',
+      titleOpen: '',
+      titleMiddle: '',
+      titleVisual: '',
+      titleSuffix: '',
+      lead: 'Open · Local · Agent-native',
       star: '在 GitHub 点 Star',
-      issue: '提交 issue',
+      issue: 'Star on GitHub',
       live: '在线',
       ribbon: 'OPEN DESIGN · 完。',
     },
@@ -2635,7 +2634,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       download: '下载桌面端',
       columns: {
         studio: '工作室',
-        library: '资源库',
+        library: 'Skill',
         connect: '连接',
         openDesign: 'Open Design',
     },
@@ -2643,9 +2642,9 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
     connectLinks: ['GitHub', '议题', '贡献者', '版本发布', 'Discord'],
     libraryLinks: {
       skills: (skills) => `${skills} 个 Skill`,
-      systems: (systems) => `${systems} 套系统`,
-      templates: '模板',
-        craft: '工艺',
+      systems: () => 'Skill reference',
+      templates: '规范',
+        craft: '规则',
       },
       openDesignLinks: {
         official: '官方来源',
@@ -5401,6 +5400,41 @@ export function localizedHref(
   const querySuffix = query ? `?${query}` : '';
   const localized = localePath(locale, path || '/');
   return `${localized}${querySuffix}${hashSuffix}`;
+}
+
+/**
+ * Build the nav language switcher prop for the shared <Header>, matching the
+ * homepage exactly. Sub-pages render the switcher inside the nav (not a
+ * separate topbar), so the chrome is identical across `/` and every sub-page.
+ * Each option points at the same page in the target locale.
+ */
+export function getHeaderLocaleSwitcher(
+  locale: LandingLocaleCode,
+  pathname = '/',
+): {
+  label: string;
+  prefix: string;
+  shortLabel: string;
+  options: Array<{
+    code: LandingLocaleCode;
+    href: string;
+    htmlLang: string;
+    label: string;
+  }>;
+} {
+  const localeDef = getLocaleDefinition(locale);
+  const topbar = getCommonCopy(locale).topbar;
+  return {
+    label: topbar.languageSwitcherLabel,
+    prefix: topbar.languageSwitcherPrefix ?? 'Lang',
+    shortLabel: localeDef.shortLabel,
+    options: LANDING_LOCALES.map((entry) => ({
+      code: entry.code,
+      href: localePath(entry.code, pathname),
+      htmlLang: entry.htmlLang,
+      label: entry.label,
+    })),
+  };
 }
 
 export function alternateLinksForPath(pathname = '/'): Array<{

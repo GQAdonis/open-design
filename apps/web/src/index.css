@@ -2134,6 +2134,18 @@ a.avatar-item:visited {
   display: flex;
   flex-direction: column;
 }
+.composer-input-wrap.has-staged-attachments {
+  gap: 6px;
+}
+.composer-input-wrap.has-staged-attachments .staged-row {
+  padding: 0 4px 2px;
+}
+.composer-input-wrap.has-staged-attachments .composer-textarea-layer {
+  min-height: 52px;
+}
+.composer-input-wrap.has-staged-attachments textarea {
+  min-height: 52px;
+}
 .composer-textarea-layer {
   position: relative;
   min-height: 88px;
@@ -2326,12 +2338,13 @@ a.avatar-item:visited {
 .staged-preview-modal {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
   background: rgba(17, 24, 39, 0.44);
+  pointer-events: auto;
 }
 .staged-preview-card {
   display: flex;
@@ -2344,6 +2357,9 @@ a.avatar-item:visited {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 .staged-preview-head {
   display: flex;

@@ -229,34 +229,98 @@ const pageHtml = renderToStaticMarkup(
         const enhanceHeader = () => {
           const chrome = document.querySelector('[data-chrome-headroom]');
           if (chrome) {
-            // Wrap the scroll listener's read + classList write in
-            // requestAnimationFrame. Trackpads and high-rate wheels fire
-            // scroll faster than the display refresh, and every callback
-            // that hits classList triggers a layout recalc. rAF collapses
-            // each burst to one DOM mutation per frame — PSI was
-            // attributing ~700ms of "forced reflow" to the un-throttled
-            // version on the previous build.
-            let lastY = window.scrollY;
+            const navBar = chrome.querySelector('.nav');
+            const glassMap = chrome.querySelector('[data-nav-glass-map]');
+
+            // Liquid Glass displacement map — ported 1:1 from Inspira UI's
+            // LiquidGlass.vue `displacementImage` computed (radius 16, border
+            // 0.07, lightness 50, alpha 0.93, blur 11, blend "difference").
+            // Built at the live bar's pixel size so the edge refraction
+            // tracks the bar as it condenses; mirrors the component's
+            // ResizeObserver-driven data URI.
+            const buildGlassMap = (w, h) => {
+              // Pill radius — half the bar height — so the refraction follows
+              // the condensed capsule's fully rounded ends.
+              const radius = Math.round(Math.min(w, h) / 2);
+              const borderRatio = 0.07;
+              const lightness = 50;
+              const alpha = 0.93;
+              const blur = 11;
+              const blend = 'difference';
+              const inset = Math.min(w, h) * (borderRatio * 0.5);
+              const svg =
+                '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
+                  '<defs>' +
+                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+                  '</defs>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#blue)" style="mix-blend-mode:' + blend + '"/>' +
+                  '<rect x="' + inset + '" y="' + inset + '" width="' + (w - inset * 2) + '" height="' + (h - inset * 2) + '" rx="' + radius + '" fill="hsl(0 0% ' + lightness + '% / ' + alpha + ')" style="filter:blur(' + blur + 'px)"/>' +
+                '</svg>';
+              return 'data:image/svg+xml,' + encodeURIComponent(svg);
+            };
+
+            const syncGlassMap = () => {
+              if (!navBar || !glassMap) return;
+              const rect = navBar.getBoundingClientRect();
+              const w = Math.max(1, Math.round(rect.width));
+              const h = Math.max(1, Math.round(rect.height));
+              const uri = buildGlassMap(w, h);
+              glassMap.setAttribute('href', uri);
+              glassMap.setAttributeNS('http://www.w3.org/1999/xlink', 'href', uri);
+            };
+
+            // Debounced map rebuild — the capsule's width/height animate on
+            // condense, so rebuilding the displacement SVG every frame would
+            // re-rasterize the filter each frame and stutter. Rebuild once the
+            // size settles; the prior map covers the brief morph.
+            let mapTimer = 0;
+            const scheduleGlassMap = () => {
+              clearTimeout(mapTimer);
+              mapTimer = setTimeout(syncGlassMap, 140);
+            };
+
+            // Condense-on-scroll with hysteresis: condense past 64px, release
+            // below 24px. The dead-band stops a scroll that lingers near a
+            // single threshold from flipping the state — and the bar's
+            // geometry — back and forth (the "jitter"). rAF collapses each
+            // scroll burst to one read + at most one class change per frame.
+            const condenseOn = 64;
+            const condenseOff = 24;
+            let condensed = false;
             let ticking = false;
-            const showTopThreshold = 100;
-            const scrollDelta = 6;
+            const onScroll = () => {
+              ticking = false;
+              const y = window.scrollY;
+              if (!condensed && y > condenseOn) {
+                condensed = true;
+                chrome.classList.add('is-condensed');
+              } else if (condensed && y < condenseOff) {
+                condensed = false;
+                chrome.classList.remove('is-condensed');
+              }
+            };
             window.addEventListener(
               'scroll',
               () => {
                 if (ticking) return;
                 ticking = true;
-                requestAnimationFrame(() => {
-                  const y = window.scrollY;
-                  const delta = y - lastY;
-                  if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
-                  else if (delta > scrollDelta) chrome.classList.add('is-hidden');
-                  else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
-                  lastY = y;
-                  ticking = false;
-                });
+                requestAnimationFrame(onScroll);
               },
               { passive: true },
             );
+            condensed = window.scrollY > condenseOn;
+            chrome.classList.toggle('is-condensed', condensed);
+
+            syncGlassMap();
+            if (navBar) {
+              if (window.ResizeObserver) {
+                new ResizeObserver(scheduleGlassMap).observe(navBar);
+              }
+              window.addEventListener('resize', scheduleGlassMap, { passive: true });
+            }
           }
 
           const stars = document.querySelector('[data-github-stars]');
@@ -364,9 +428,267 @@ const pageHtml = renderToStaticMarkup(
             .catch(() => {});
         };
 
+        // ABOUT statement — "Text Scroll Reveal" (Magic UI / Inspira port).
+        // The copy is a sticky, vertically-centered paragraph inside a tall
+        // track (`[data-about-reveal]`); as the reader scrolls through, each
+        // token brightens in turn. Progress is the track top's travel past
+        // the viewport top (`-rect.top / innerHeight`), and token i lights
+        // over the range [i/n, (i+1)/n] — exactly the component's mapping.
+        const enhanceStatementReveal = () => {
+          const host = document.querySelector('[data-about-reveal]');
+          if (!host) return;
+          const words = host.querySelectorAll('[data-reveal-word]');
+          if (!words.length) return;
+          // Reduced motion: leave the copy at full ink (no scroll dependence).
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+          host.classList.add('is-reveal-active');
+          const n = words.length;
+          let ticking = false;
+          const update = () => {
+            ticking = false;
+            const rect = host.getBoundingClientRect();
+            // Non-pinned mapping: reveal as the block travels up through the
+            // viewport. progress 0 when its top sits at 82% of the viewport
+            // (just risen into view), 1 by the time it reaches 22% (near the
+            // top) — so the copy lights word by word while it's on screen,
+            // without a tall pinned track.
+            const vh = window.innerHeight;
+            const start = vh * 0.82;
+            const end = vh * 0.22;
+            const progress = (start - rect.top) / (start - end);
+            for (let i = 0; i < n; i++) {
+              const start = i / n;
+              const end = (i + 1) / n;
+              let o;
+              if (progress <= start) o = 0;
+              else if (progress >= end) o = 1;
+              else o = (progress - start) / (end - start);
+              // Base faint 0.18 → full 1 (the dim-ghost → lit look).
+              words[i].style.opacity = String(0.18 + 0.82 * o);
+            }
+          };
+          const onScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.addEventListener('resize', onScroll, { passive: true });
+          update();
+        };
+
+        // Labs filter Dock — macOS-style proximity magnification (React Bits
+        // "Dock", vanilla port). Each item scales by its distance to the
+        // cursor using a triangular falloff over `dist` px; a short CSS
+        // transition stands in for the spring. Centers come from offset
+        // geometry (unaffected by the scale transform), so there's no
+        // feedback wobble. rAF-throttled; resets on leave; no-ops under
+        // reduced-motion.
+        const enhanceLabDock = () => {
+          const dock = document.querySelector('[data-lab-dock]');
+          if (!dock) return;
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+          if (items.length === 0) return;
+          const MAX = 1.16; // peak scale (gentler so tighter tiles don't crowd)
+          const DIST = 130; // px of cursor proximity that still magnifies
+          let ticking = false;
+          const apply = (cursorX) => {
+            const dockLeft = dock.getBoundingClientRect().left;
+            const x = cursorX - dockLeft;
+            for (const it of items) {
+              const center = it.offsetLeft + it.offsetWidth / 2;
+              const t = Math.max(0, 1 - Math.abs(x - center) / DIST);
+              // Keep the selected tile's CSS lift (translateY(-16px)) while we
+              // drive the magnify scale via inline transform.
+              const lift = it.classList.contains('active') ? 'translateY(-16px) ' : '';
+              it.style.transform = `${lift}scale(${(1 + (MAX - 1) * t).toFixed(3)})`;
+            }
+          };
+          dock.addEventListener(
+            'mousemove',
+            (event) => {
+              if (ticking) return;
+              ticking = true;
+              requestAnimationFrame(() => {
+                apply(event.clientX);
+                ticking = false;
+              });
+            },
+            { passive: true },
+          );
+          dock.addEventListener('mouseleave', () => {
+            for (const it of items) it.style.transform = '';
+          });
+        };
+
+        // Labs Dock — the tabs switch the command-window preview (image + title
+        // overlay) in place, no navigation. The active mode also auto-advances
+        // left→right as a self-running showcase: it pauses on hover, only runs
+        // while the dock is on screen, and the auto-advance is disabled under
+        // reduced-motion (the click-to-switch behaviour stays active).
+        const enhanceLabAutoCycle = () => {
+          const dock = document.querySelector('[data-lab-dock]');
+          if (!dock) return;
+          const autoPlay = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+          if (items.length < 2) return;
+          const previewImg = document.querySelector('[data-lab-preview] img');
+          const previewTitle = document.querySelector('[data-lab-preview-title]');
+
+          // Preload every preview so switches are instant, no load flash.
+          for (const it of items) {
+            const src = it.getAttribute('data-preview-src');
+            if (src) {
+              const pre = new Image();
+              pre.src = src;
+            }
+          }
+
+          let index = items.findIndex((it) => it.classList.contains('active'));
+          if (index < 0) index = 0;
+          const show = (i) => {
+            items.forEach((it, k) => it.classList.toggle('active', k === i));
+            const it = items[i];
+            const src = it.getAttribute('data-preview-src');
+            const title = it.getAttribute('data-preview-title');
+            if (previewImg && src) {
+              previewImg.setAttribute('src', src);
+              // Keep the precise-lazyload observer from reverting our swap.
+              previewImg.setAttribute('data-precise-src', src);
+            }
+            if (previewTitle && title) previewTitle.textContent = title;
+          };
+          show(index);
+
+          const INTERVAL = 2400;
+          let timer = null;
+          let paused = false;
+          const tick = () => {
+            if (paused) return;
+            index = (index + 1) % items.length;
+            show(index);
+          };
+          const start = () => {
+            if (autoPlay && timer == null) timer = window.setInterval(tick, INTERVAL);
+          };
+          const stop = () => {
+            if (timer != null) {
+              clearInterval(timer);
+              timer = null;
+            }
+          };
+          dock.addEventListener('mouseenter', () => { paused = true; });
+          dock.addEventListener('mouseleave', () => { paused = false; });
+
+          // Clicking a tab switches the preview in place — no navigation.
+          // Restart the dwell so the picked tab stays put for a full interval.
+          items.forEach((it, i) => {
+            it.addEventListener('click', (event) => {
+              event.preventDefault();
+              index = i;
+              show(index);
+              if (timer != null) {
+                stop();
+                start();
+              }
+            });
+          });
+
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver(
+              (entries) => {
+                for (const entry of entries) {
+                  if (entry.isIntersecting) start();
+                  else stop();
+                }
+              },
+              { threshold: 0.2 },
+            );
+            io.observe(dock);
+          } else {
+            start();
+          }
+        };
+
+        // Roll the work-stats numbers up on scroll-into-view. The data lives
+        // as DOM text overlaid on the painterly cards (the values used to be
+        // baked into the card images). This page ships ZERO client React
+        // (renderToStaticMarkup, no @astrojs/react), so the count-up is driven
+        // here.
+        //
+        // Robustness contract: each [data-countup] span renders its FINAL value
+        // in static HTML. The roll is a pure enhancement — we reset to `from`
+        // ONLY at the moment the element enters view, inside run(). If the
+        // observer never fires (reduced motion, no IO, scrolled past before a
+        // frame) the final value is left untouched, so a number can never get
+        // stuck blank or at 0.
+        const enhanceCountups = () => {
+          const nodes = document.querySelectorAll('[data-countup]');
+          if (nodes.length === 0) return;
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          if (reduceMotion || !('IntersectionObserver' in window)) return;
+
+          const decimalsOf = (value) => {
+            const str = String(value);
+            return str.includes('.') ? str.split('.')[1].length : 0;
+          };
+          const makeFormatter = (el, to) => {
+            const suffix = el.dataset.countupSuffix || '';
+            const separator = el.dataset.countupSeparator || '';
+            const decimals = decimalsOf(to);
+            return (value) => {
+              const formatted = new Intl.NumberFormat('en-US', {
+                useGrouping: Boolean(separator),
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+              }).format(value);
+              return (separator ? formatted.replace(/,/g, separator) : formatted) + suffix;
+            };
+          };
+          const ease = (t) => 1 - Math.pow(1 - t, 4);
+
+          const done = new WeakSet();
+          const run = (el) => {
+            if (done.has(el)) return;
+            done.add(el);
+            const to = Number(el.dataset.countupTo);
+            if (!Number.isFinite(to)) return;
+            const from = Number(el.dataset.countupFrom || '0');
+            const duration = Math.max(0, Number(el.dataset.countupDuration || '2')) * 1000;
+            const format = makeFormatter(el, to);
+            let startTs = null;
+            const tick = (ts) => {
+              if (startTs === null) startTs = ts;
+              const progress = Math.min(1, (ts - startTs) / duration);
+              el.textContent = format(from + (to - from) * ease(progress));
+              if (progress < 1) requestAnimationFrame(tick);
+              else el.textContent = format(to);
+            };
+            requestAnimationFrame(tick);
+          };
+
+          const countObserver = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                run(entry.target);
+                countObserver.unobserve(entry.target);
+              }
+            },
+            { threshold: 0, rootMargin: '0px 0px -8% 0px' },
+          );
+          for (const el of nodes) countObserver.observe(el);
+        };
+
         const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
         enhanceHeader();
         enhanceWire();
+        enhanceStatementReveal();
+        enhanceLabDock();
+        enhanceLabAutoCycle();
+        enhanceCountups();
         if (elements.length === 0) return;
 
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -388,6 +710,315 @@ const pageHtml = renderToStaticMarkup(
 
         for (const el of elements) observer.observe(el);
       })();
+    </script>
+    <script>
+      import createGlobe from 'cobe';
+
+      const initContributorGlobes = () => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const canvases = Array.from(
+          document.querySelectorAll<HTMLCanvasElement>('[data-testimonial-globe] canvas'),
+        );
+        if (canvases.length === 0) return;
+
+        const markers = [
+          { location: [37.7749, -122.4194], size: 0.055 },
+          { location: [40.7128, -74.006], size: 0.045 },
+          { location: [52.52, 13.405], size: 0.052 },
+          { location: [35.6762, 139.6503], size: 0.05 },
+          { location: [31.2304, 121.4737], size: 0.045 },
+          { location: [1.3521, 103.8198], size: 0.04 },
+          { location: [-23.5505, -46.6333], size: 0.042 },
+          { location: [-33.8688, 151.2093], size: 0.042 },
+        ] as const;
+
+        for (const canvas of canvases) {
+          if (canvas.dataset.globeReady === 'true') continue;
+          canvas.dataset.globeReady = 'true';
+
+          let width = 0;
+          let phi = 0.32;
+          let frameId = 0;
+          let active = false;
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const updateSize = () => {
+            width = Math.max(260, Math.floor(canvas.offsetWidth || 360));
+          };
+          updateSize();
+          window.addEventListener('resize', updateSize, { passive: true });
+
+          const globe = createGlobe(canvas, {
+            devicePixelRatio: dpr,
+            width: width * dpr,
+            height: width * dpr,
+            phi,
+            theta: 0.28,
+            dark: 0,
+            diffuse: 0,
+            mapSamples: 12000,
+            mapBrightness: 1.0,
+            mapBaseBrightness: 0,
+            baseColor: [1, 1, 1],
+            markerColor: [0.31, 0.98, 0.08],
+            glowColor: [1, 1, 1],
+            opacity: 1,
+            scale: 1,
+            markerElevation: 0.015,
+            markers: markers.map((marker) => ({
+              location: [...marker.location] as [number, number],
+              size: marker.size,
+            })),
+          });
+
+          const render = () => {
+            if (!active) return;
+            if (!reduceMotion) phi += 0.0042;
+            globe.update({
+              width: width * dpr,
+              height: width * dpr,
+              phi,
+            });
+            frameId = requestAnimationFrame(render);
+          };
+          const start = () => {
+            if (active) return;
+            active = true;
+            frameId = requestAnimationFrame(render);
+          };
+          const stop = () => {
+            active = false;
+            if (frameId) cancelAnimationFrame(frameId);
+            frameId = 0;
+          };
+
+          if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver(
+              ([entry]) => {
+                if (entry?.isIntersecting) start();
+                else stop();
+              },
+              { threshold: 0.05 },
+            );
+            observer.observe(canvas);
+          } else {
+            start();
+          }
+        }
+      };
+
+      initContributorGlobes();
+
+      // Contributor avatars orbiting the globe. Fetches the same GitHub
+      // contributors list and lays the avatars out at even angles around a
+      // spinning ring (see `.contributor-orbit` in globals.css). No spokes.
+      const enhanceContributorOrbit = () => {
+        const mounts = Array.from(
+          document.querySelectorAll<HTMLElement>('[data-contributor-orbit]'),
+        );
+        if (mounts.length === 0) return;
+
+        const build = (avatars: { src: string; href: string; handle: string }[]) => {
+          const count = avatars.length;
+          for (const mount of mounts) {
+            const ring = document.createElement('div');
+            ring.className = 'orbit-ring';
+            avatars.forEach((a, i) => {
+              const slot = document.createElement('div');
+              slot.className = 'orbit-slot';
+              slot.style.setProperty('--angle', `${(360 / count) * i}deg`);
+
+              const avatar = document.createElement('a');
+              avatar.className = 'orbit-avatar';
+              avatar.href = a.href;
+              avatar.target = '_blank';
+              avatar.rel = 'noreferrer noopener';
+              avatar.setAttribute('aria-label', `Open ${a.handle} on GitHub`);
+
+              const img = document.createElement('img');
+              img.src = a.src;
+              img.alt = '';
+              img.loading = 'lazy';
+              img.decoding = 'async';
+
+              avatar.append(img);
+              slot.append(avatar);
+              ring.append(slot);
+            });
+            mount.replaceChildren(ring);
+          }
+        };
+
+        fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=60', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+          .then((data) => {
+            if (!Array.isArray(data)) return;
+            const avatars = data
+              .filter(
+                (c) =>
+                  c &&
+                  typeof c.login === 'string' &&
+                  typeof c.avatar_url === 'string' &&
+                  typeof c.html_url === 'string' &&
+                  c.type !== 'Bot' &&
+                  !c.login.endsWith('[bot]'),
+              )
+              // Take a deeper slice so the ring includes non-core / non-team
+              // contributors, not just the top committers.
+              .slice(0, 16)
+              .map((c) => ({
+                src: `${c.avatar_url}${c.avatar_url.includes('?') ? '&' : '?'}s=96`,
+                href: c.html_url,
+                handle: c.login,
+              }));
+            if (avatars.length === 0) return;
+            build(avatars);
+          })
+          .catch(() => {});
+      };
+
+      enhanceContributorOrbit();
+    </script>
+    <script>
+      // FallingText (React Bits) ported to vanilla matter-js. The agent-name
+      // chips in the Method section drop into a physics playground on trigger;
+      // the words are server-rendered (.falling-word) so the text is readable
+      // and SEO-visible before any physics runs.
+      import Matter from 'matter-js';
+
+      const initFallingText = () => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const containers = Array.from(
+          document.querySelectorAll<HTMLElement>('[data-falling-text]'),
+        );
+        if (containers.length === 0) return;
+
+        const { Engine, Render, World, Bodies, Runner, Mouse, MouseConstraint, Body } = Matter;
+
+        for (const container of containers) {
+          if (container.dataset.fallingReady === 'true') continue;
+          const target = container.querySelector<HTMLElement>('.falling-text-target');
+          const canvasContainer = container.querySelector<HTMLElement>('.falling-text-canvas');
+          if (!target || !canvasContainer) continue;
+
+          const gravity = Number.parseFloat(container.dataset.gravity || '1');
+          const stiffness = Number.parseFloat(container.dataset.stiffness || '0.2');
+          const trigger = container.dataset.trigger || 'hover';
+
+          let started = false;
+          const runPhysics = () => {
+            const rect = container.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            if (width <= 0 || height <= 0) return;
+
+            const engine = Engine.create();
+            engine.world.gravity.y = gravity;
+
+            const render = Render.create({
+              element: canvasContainer,
+              engine,
+              options: { width, height, background: 'transparent', wireframes: false },
+            });
+
+            const wall = { isStatic: true, render: { fillStyle: 'transparent' } };
+            const floor = Bodies.rectangle(width / 2, height + 25, width, 50, wall);
+            const leftWall = Bodies.rectangle(-25, height / 2, 50, height, wall);
+            const rightWall = Bodies.rectangle(width + 25, height / 2, 50, height, wall);
+            const ceiling = Bodies.rectangle(width / 2, -25, width, 50, wall);
+
+            const words = Array.from(target.querySelectorAll<HTMLElement>('.falling-word'));
+            const bodies = words.map((elem) => {
+              const r = elem.getBoundingClientRect();
+              const x = r.left - rect.left + r.width / 2;
+              const y = r.top - rect.top + r.height / 2;
+              const body = Bodies.rectangle(x, y, r.width, r.height, {
+                restitution: 0.8,
+                frictionAir: 0.01,
+                friction: 0.2,
+                render: { fillStyle: 'transparent' },
+              });
+              Body.setVelocity(body, { x: (Math.random() - 0.5) * 5, y: 0 });
+              Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+              return { elem, body };
+            });
+
+            for (const { elem } of bodies) {
+              elem.style.position = 'absolute';
+              elem.style.margin = '0';
+            }
+
+            const mouse = Mouse.create(container);
+            // Don't let the physics surface swallow page scroll over the canvas.
+            const m = mouse as unknown as { mousewheel: EventListener; element: HTMLElement };
+            m.element.removeEventListener('wheel', m.mousewheel);
+            m.element.removeEventListener('DOMMouseScroll', m.mousewheel);
+            const mouseConstraint = MouseConstraint.create(engine, {
+              mouse,
+              constraint: { stiffness, render: { visible: false } },
+            });
+            render.mouse = mouse;
+
+            World.add(engine.world, [
+              floor,
+              leftWall,
+              rightWall,
+              ceiling,
+              mouseConstraint,
+              ...bodies.map((b) => b.body),
+            ]);
+
+            const runner = Runner.create();
+            Runner.run(runner, engine);
+            Render.run(render);
+
+            const loop = () => {
+              for (const { body, elem } of bodies) {
+                elem.style.left = `${body.position.x}px`;
+                elem.style.top = `${body.position.y}px`;
+                elem.style.transform = `translate(-50%, -50%) rotate(${body.angle}rad)`;
+              }
+              requestAnimationFrame(loop);
+            };
+            loop();
+          };
+
+          const start = () => {
+            if (started) return;
+            started = true;
+            container.dataset.fallingReady = 'true';
+            runPhysics();
+          };
+
+          if (reduceMotion) {
+            container.dataset.fallingReady = 'true';
+            continue;
+          }
+          if (trigger === 'auto') start();
+          else if (trigger === 'scroll') {
+            const io = new IntersectionObserver(
+              ([entry]) => {
+                if (entry?.isIntersecting) {
+                  start();
+                  io.disconnect();
+                }
+              },
+              // Fire once the icon row has scrolled up into roughly the top
+              // half of the viewport ("near the top"), not the moment it peeks
+              // in from the bottom.
+              { threshold: 0, rootMargin: '0px 0px -45% 0px' },
+            );
+            io.observe(container);
+          } else if (trigger === 'click') {
+            container.addEventListener('click', start, { once: true });
+          } else {
+            container.addEventListener('mouseenter', start, { once: true });
+          }
+        }
+      };
+
+      initFallingText();
     </script>
   </body>
 </html>

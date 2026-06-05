@@ -29,6 +29,8 @@ export interface UrlLoadDecision {
   commentMode: boolean;
   /** Inspect mode is active — needs the srcdoc selection bridge for live tuning. */
   inspectMode?: boolean;
+  /** Annotate mode is active — needs the srcdoc annotate bridge injected. */
+  annotateMode?: boolean;
   /** Direct text edit is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
   editMode?: boolean;
   /** The artifact has its own script that listens for host mode postMessages while URL-loaded. */
@@ -37,6 +39,8 @@ export interface UrlLoadDecision {
   paletteActive?: boolean;
   /** Draw annotations need the srcDoc snapshot bridge for screenshot export. */
   drawMode?: boolean;
+  /** Screenshot capture needs the srcDoc snapshot bridge to match the visible preview. */
+  screenshotCapture?: boolean;
   /**
    * Artifact ships the class based tweaks template (`.tw-panel` / `.tw-hidden`)
    * and therefore needs the srcDoc tweaks bridge so the toolbar toggle can
@@ -72,11 +76,14 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.
   if (d.inspectMode) return false;
+  // Annotate needs the annotate bridge injected via buildSrcdoc.
+  if (d.annotateMode) return false;
   if (d.editMode && !d.urlModeBridge) return false;
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;
   if (d.drawMode) return false;
+  if (d.screenshotCapture) return false;
   // The class based tweaks template relies on the srcDoc tweaks bridge
   // emitting `od:tweaks-available` on mount; on the URL load path the bridge
   // is never injected, so the toolbar toggle would stay disabled even though

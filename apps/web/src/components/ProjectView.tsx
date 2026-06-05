@@ -2786,6 +2786,13 @@ export function ProjectView({
     [handleSend, currentConversationActionDisabled],
   );
 
+  const [composerAttachmentInbox, setComposerAttachmentInbox] = useState<ChatAttachment[]>([]);
+  const handleStageBoardCapture = useCallback((att: ChatAttachment) => {
+    setComposerAttachmentInbox((current) => (
+      current.some((item) => item.path === att.path) ? current : [...current, att]
+    ));
+  }, []);
+
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
       if (currentConversationActionDisabled || todos.length === 0) return;
@@ -4134,6 +4141,11 @@ export function ProjectView({
               }}
               activePluginSnapshot={activePluginSnapshot}
               onCollapse={() => setWorkspaceFocused(true)}
+              composerAttachmentInbox={composerAttachmentInbox}
+              onComposerAttachmentsAccepted={(paths) => {
+                const accepted = new Set(paths);
+                setComposerAttachmentInbox((current) => current.filter((att) => !accepted.has(att.path)));
+              }}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">
@@ -4178,6 +4190,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onStageBoardCapture={handleStageBoardCapture}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
           focusMode={workspaceFocused}

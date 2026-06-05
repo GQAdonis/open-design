@@ -144,6 +144,8 @@ interface Props {
   onChangeByokImageModel?: (model: string) => void;
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
+  incomingAttachments?: ChatAttachment[];
+  onIncomingAttachmentsAccepted?: (paths: string[]) => void;
   // Set when the project was created with a plugin already pinned
   // (PluginLoopHome on Home). When provided, the in-composer plugin
   // rail collapses to the single pinned plugin so the user can see
@@ -161,6 +163,7 @@ interface Props {
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
   focus: () => void;
+  addUploadedAttachments: (attachments: ChatAttachment[]) => string[];
 }
 
 export interface ChatSendMeta {
@@ -209,6 +212,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onChangeByokImageModel,
       currentSkillId = null,
       onProjectSkillChange,
+      incomingAttachments = [],
+      onIncomingAttachmentsAccepted,
       pinnedPluginId = null,
       footerAccessory,
     },
@@ -270,6 +275,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [toolsOpen, setToolsOpen] = useState(false);
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const composerRootRef = useRef<HTMLDivElement | null>(null);
+    const composerShellRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -284,6 +291,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // backspace before the parent stops passing initialDraft) does not get
     // overwritten by the effect.
     const seededRef = useRef(Boolean(initialDraft));
+    const pendingIncomingAttachmentPathsRef = useRef<string[]>([]);
 
     useEffect(() => {
       if (seededRef.current) return;
@@ -660,6 +668,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
+    function addUploadedAttachments(attachments: ChatAttachment[]): string[] {
+      if (attachments.length === 0) return [];
+      const acceptedPaths = attachments.map((att) => att.path);
+      setStaged((current) => {
+        const existingPaths = new Set(current.map((att) => att.path));
+        const additions: ChatAttachment[] = [];
+        for (const att of attachments) {
+          if (existingPaths.has(att.path)) continue;
+          existingPaths.add(att.path);
+          additions.push(att);
+        }
+        return additions.length > 0 ? [...current, ...additions] : current;
+      });
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus({ preventScroll: true });
+      });
+      return acceptedPaths;
+    }
+
     useImperativeHandle(
       ref,
       () => ({
@@ -677,9 +704,30 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         focus: () => {
           textareaRef.current?.focus();
         },
+        addUploadedAttachments,
       }),
       []
     );
+
+    useEffect(() => {
+      if (incomingAttachments.length === 0) return;
+      const acceptedPaths = incomingAttachments.map((att) => att.path);
+      pendingIncomingAttachmentPathsRef.current = [
+        ...pendingIncomingAttachmentPathsRef.current,
+        ...acceptedPaths.filter((path) => !pendingIncomingAttachmentPathsRef.current.includes(path)),
+      ];
+      addUploadedAttachments(incomingAttachments);
+    }, [incomingAttachments]);
+
+    useLayoutEffect(() => {
+      if (pendingIncomingAttachmentPathsRef.current.length === 0) return;
+      const presentPaths = new Set(staged.map((att) => att.path));
+      const acceptedPaths = pendingIncomingAttachmentPathsRef.current.filter((path) => presentPaths.has(path));
+      if (acceptedPaths.length === 0) return;
+      pendingIncomingAttachmentPathsRef.current = pendingIncomingAttachmentPathsRef.current.filter((path) => !presentPaths.has(path));
+      textareaRef.current?.focus({ preventScroll: true });
+      onIncomingAttachmentsAccepted?.(acceptedPaths);
+    }, [onIncomingAttachmentsAccepted, staged]);
 
     function reset() {
       setDraft("");
@@ -938,6 +986,33 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       streaming,
       streamingAnnotationSendPending,
     ]);
+
+    // Document-level paste handler: captures Cmd+V even when the textarea
+    // lost focus to the system screenshot tool. Only intercepts when the
+    // active element is the body (no focused input) or is inside this
+    // composer — so other textareas/editors in the same page are unaffected.
+    useEffect(() => {
+      function onDocumentPaste(e: ClipboardEvent) {
+        const active = document.activeElement;
+        const isBody = !active || active === document.body || active === document.documentElement;
+        const isInsideComposer = composerRootRef.current?.contains(active) ?? false;
+        if (!isBody && !isInsideComposer) return;
+
+        const items = Array.from(e.clipboardData?.items ?? []);
+        const files = items
+          .filter((item) => item.kind === 'file')
+          .map((item) => item.getAsFile())
+          .filter((f): f is File => f !== null);
+
+        if (files.length === 0) return;
+        e.preventDefault();
+        void uploadFiles(files);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      }
+
+      document.addEventListener('paste', onDocumentPaste);
+      return () => document.removeEventListener('paste', onDocumentPaste);
+    }, [projectId]);
 
     function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
       const items = Array.from(e.clipboardData?.items ?? []);
@@ -1216,6 +1291,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     return (
       <div
+        ref={composerRootRef}
         className={`composer${dragActive ? " drag-active" : ""}`}
         data-testid="chat-composer"
         onDragOver={(e) => {
@@ -1225,19 +1301,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
       >
-        <div className="composer-shell">
+        <div className="composer-shell" ref={composerShellRef}>
           {stagedSkills.length > 0 ? (
             <StagedSkills
               skills={stagedSkills}
               onRemove={removeStagedSkill}
-              t={t}
-            />
-          ) : null}
-          {staged.length > 0 ? (
-            <StagedAttachments
-              attachments={staged}
-              projectId={projectId}
-              onRemove={removeStaged}
               t={t}
             />
           ) : null}
@@ -1347,8 +1415,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <div
             className={`composer-input-wrap${
               composerMentionParts ? ' has-mention-overlay' : ''
-            }`}
+            }${staged.length > 0 ? ' has-staged-attachments' : ''}`}
           >
+            {staged.length > 0 ? (
+              <StagedAttachments
+                attachments={staged}
+                projectId={projectId}
+                onRemove={removeStaged}
+                t={t}
+              />
+            ) : null}
             <div className="composer-textarea-layer">
               {composerMentionParts ? (
                 <div
