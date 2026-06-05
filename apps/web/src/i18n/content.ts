@@ -124,6 +124,14 @@ import {
   TH_PROMPT_TEMPLATE_TAGS,
   TH_SKILL_COPY,
 } from './content.th';
+import {
+  IT_DESIGN_SYSTEM_CATEGORIES,
+  IT_DESIGN_SYSTEM_SUMMARIES,
+  IT_PROMPT_TEMPLATE_CATEGORIES,
+  IT_PROMPT_TEMPLATE_COPY,
+  IT_PROMPT_TEMPLATE_TAGS,
+  IT_SKILL_COPY,
+} from './content.it';
 
 type LocalizedSkillCopy = { description?: string; examplePrompt?: string };
 type LocalizedPromptTemplateCopy = Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>;
@@ -1189,6 +1197,14 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateTags: TH_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: TH_PROMPT_TEMPLATE_COPY,
   },
+  it: {
+    skillCopy: IT_SKILL_COPY,
+    designSystemSummaries: IT_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: IT_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: IT_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: IT_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: IT_PROMPT_TEMPLATE_COPY,
+  },
 };
 
 function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedContentIds {
@@ -1211,6 +1227,14 @@ export const LOCALIZED_CONTENT_IDS = {
 export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
 export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
+
+// True when a locale resolves a built-in-content bundle — either its own
+// registered bundle or an intentional script fallback (zh-TW -> zh-CN). When
+// false, built-in skill / design-system / prompt-template copy renders in
+// English for that locale. Every supported non-English locale should be true.
+export function hasLocalizedContent(locale: Locale): boolean {
+  return getLocalizedContent(locale) !== undefined;
+}
 
 function getLocalizedContent(locale: Locale): LocalizedContentBundle | undefined {
   const direct = LOCALIZED_CONTENT[locale];
