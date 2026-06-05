@@ -232,7 +232,7 @@ e2e_vitest_seconds="0"
 playwright_critical_exit_code="0"
 playwright_critical_seconds="0"
 
-if [ "$mode" = "setup" ] || [ "$mode" = "policy" ] || [ "$mode" = "unit" ] || [ "$mode" = "typecheck" ] || [ "$mode" = "daemon" ] || [ "$mode" = "daemon-shard" ] || [ "$mode" = "web" ] || [ "$mode" = "build" ] || [ "$mode" = "browser" ]; then
+if [ "$mode" = "setup" ] || [ "$mode" = "policy" ] || [ "$mode" = "unit" ] || [ "$mode" = "typecheck" ] || [ "$mode" = "daemon" ] || [ "$mode" = "daemon-shard" ] || [ "$mode" = "daemon-parallel" ] || [ "$mode" = "web" ] || [ "$mode" = "build" ] || [ "$mode" = "browser" ]; then
   package_manager="$(node -p "require('./package.json').packageManager")"
   append_summary ""
   append_summary "### Corepack"
