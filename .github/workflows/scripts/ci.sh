@@ -4,7 +4,7 @@ set -Eeuo pipefail
 mode="${1:-${OD_CI_MODE:-}}"
 
 if [ -z "$mode" ]; then
-  echo "usage: $0 <probe|setup|policy|unit>" >&2
+  echo "usage: $0 <probe|setup|policy|unit|typecheck>" >&2
   exit 2
 fi
 
@@ -43,7 +43,7 @@ capture_cmd() {
 
 require_mode() {
   case "$mode" in
-    probe | setup | policy | unit) ;;
+    probe | setup | policy | unit | typecheck) ;;
     *)
       echo "unknown CI mode: $mode" >&2
       exit 2
@@ -175,8 +175,21 @@ tools_dev_test_exit_code="0"
 tools_dev_test_seconds="0"
 tools_pack_test_exit_code="0"
 tools_pack_test_seconds="0"
+typecheck_status="skipped"
+typecheck_exit_code="0"
+typecheck_seconds="0"
+daemon_build_exit_code="0"
+daemon_build_seconds="0"
+desktop_build_exit_code="0"
+desktop_build_seconds="0"
+web_sidecar_build_exit_code="0"
+web_sidecar_build_seconds="0"
+workspace_typecheck_exit_code="0"
+workspace_typecheck_seconds="0"
+scripts_typecheck_exit_code="0"
+scripts_typecheck_seconds="0"
 
-if [ "$mode" = "setup" ] || [ "$mode" = "policy" ] || [ "$mode" = "unit" ]; then
+if [ "$mode" = "setup" ] || [ "$mode" = "policy" ] || [ "$mode" = "unit" ] || [ "$mode" = "typecheck" ]; then
   append_summary ""
   append_summary "### Install"
   append_summary ""
@@ -325,6 +338,56 @@ if [ "$mode" = "unit" ] && [ "$install_exit_code" = "0" ]; then
   unit_seconds="$(( $(date +%s) - unit_start ))"
 fi
 
+record_typecheck_result() {
+  local label="$1"
+  local exit_code="$2"
+  local seconds="$3"
+
+  append_summary "| \`$label\` | \`$exit_code\` | \`$seconds\` |"
+  if [ "$exit_code" != "0" ] && [ "$typecheck_status" = "ok" ]; then
+    typecheck_status="failed"
+    typecheck_exit_code="$exit_code"
+  fi
+}
+
+if [ "$mode" = "typecheck" ] && [ "$install_exit_code" = "0" ]; then
+  append_summary ""
+  append_summary "### Typecheck"
+  append_summary ""
+  append_summary "| Check | Exit code | Seconds |"
+  append_summary "| --- | ---: | ---: |"
+
+  typecheck_status="ok"
+  typecheck_start="$(date +%s)"
+
+  run_ci_command "@open-design/daemon build" pnpm --filter @open-design/daemon build
+  daemon_build_exit_code="$last_command_exit_code"
+  daemon_build_seconds="$last_command_seconds"
+  record_typecheck_result "@open-design/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
+
+  run_ci_command "@open-design/desktop build" pnpm --filter @open-design/desktop build
+  desktop_build_exit_code="$last_command_exit_code"
+  desktop_build_seconds="$last_command_seconds"
+  record_typecheck_result "@open-design/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
+
+  run_ci_command "@open-design/web build:sidecar" pnpm --filter @open-design/web build:sidecar
+  web_sidecar_build_exit_code="$last_command_exit_code"
+  web_sidecar_build_seconds="$last_command_seconds"
+  record_typecheck_result "@open-design/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
+
+  run_ci_command "workspace typecheck" pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+  workspace_typecheck_exit_code="$last_command_exit_code"
+  workspace_typecheck_seconds="$last_command_seconds"
+  record_typecheck_result "workspace typecheck" "$workspace_typecheck_exit_code" "$workspace_typecheck_seconds"
+
+  run_ci_command "scripts typecheck" pnpm exec tsc -p scripts/tsconfig.json --noEmit
+  scripts_typecheck_exit_code="$last_command_exit_code"
+  scripts_typecheck_seconds="$last_command_seconds"
+  record_typecheck_result "scripts typecheck" "$scripts_typecheck_exit_code" "$scripts_typecheck_seconds"
+
+  typecheck_seconds="$(( $(date +%s) - typecheck_start ))"
+fi
+
 if [ -n "$pnpm_store" ] && [ -d "$pnpm_store" ]; then
   pnpm_store_size="$(du -sh "$pnpm_store" 2>/dev/null | awk '{print $1}')"
 fi
@@ -343,6 +406,8 @@ append_summary "| Policy status | \`$policy_status\` |"
 append_summary "| Policy seconds | \`$policy_seconds\` |"
 append_summary "| Unit status | \`$unit_status\` |"
 append_summary "| Unit seconds | \`$unit_seconds\` |"
+append_summary "| Typecheck status | \`$typecheck_status\` |"
+append_summary "| Typecheck seconds | \`$typecheck_seconds\` |"
 
 cat > "$manifest" <<JSON
 {
@@ -396,6 +461,19 @@ cat > "$manifest" <<JSON
   "toolsDevTestSeconds": "$(json_escape "$tools_dev_test_seconds")",
   "toolsPackTestExitCode": "$(json_escape "$tools_pack_test_exit_code")",
   "toolsPackTestSeconds": "$(json_escape "$tools_pack_test_seconds")",
+  "typecheckStatus": "$(json_escape "$typecheck_status")",
+  "typecheckExitCode": "$(json_escape "$typecheck_exit_code")",
+  "typecheckSeconds": "$(json_escape "$typecheck_seconds")",
+  "daemonBuildExitCode": "$(json_escape "$daemon_build_exit_code")",
+  "daemonBuildSeconds": "$(json_escape "$daemon_build_seconds")",
+  "desktopBuildExitCode": "$(json_escape "$desktop_build_exit_code")",
+  "desktopBuildSeconds": "$(json_escape "$desktop_build_seconds")",
+  "webSidecarBuildExitCode": "$(json_escape "$web_sidecar_build_exit_code")",
+  "webSidecarBuildSeconds": "$(json_escape "$web_sidecar_build_seconds")",
+  "workspaceTypecheckExitCode": "$(json_escape "$workspace_typecheck_exit_code")",
+  "workspaceTypecheckSeconds": "$(json_escape "$workspace_typecheck_seconds")",
+  "scriptsTypecheckExitCode": "$(json_escape "$scripts_typecheck_exit_code")",
+  "scriptsTypecheckSeconds": "$(json_escape "$scripts_typecheck_seconds")",
   "dockerVersion": "$(json_escape "$docker_version")",
   "dockerStatus": "$(json_escape "$docker_status")",
   "rootDisk": "$(json_escape "$disk_root")",
@@ -415,4 +493,8 @@ fi
 
 if [ "$unit_exit_code" != "0" ]; then
   exit "$unit_exit_code"
+fi
+
+if [ "$typecheck_exit_code" != "0" ]; then
+  exit "$typecheck_exit_code"
 fi
