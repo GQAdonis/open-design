@@ -12,6 +12,7 @@ on:
           - probe
           - setup
           - policy
+          - unit
 
 permissions:
   contents: read

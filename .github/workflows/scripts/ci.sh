@@ -4,7 +4,7 @@ set -Eeuo pipefail
 mode="${1:-${OD_CI_MODE:-}}"
 
 if [ -z "$mode" ]; then
-  echo "usage: $0 <probe|setup|policy>" >&2
+  echo "usage: $0 <probe|setup|policy|unit>" >&2
   exit 2
 fi
 
@@ -43,7 +43,7 @@ capture_cmd() {
 
 require_mode() {
   case "$mode" in
-    probe | setup | policy) ;;
+    probe | setup | policy | unit) ;;
     *)
       echo "unknown CI mode: $mode" >&2
       exit 2
@@ -158,8 +158,25 @@ guard_exit_code="0"
 guard_seconds="0"
 i18n_exit_code="0"
 i18n_seconds="0"
+unit_status="skipped"
+unit_exit_code="0"
+unit_seconds="0"
+contracts_test_exit_code="0"
+contracts_test_seconds="0"
+host_test_exit_code="0"
+host_test_seconds="0"
+platform_test_exit_code="0"
+platform_test_seconds="0"
+sidecar_test_exit_code="0"
+sidecar_test_seconds="0"
+sidecar_proto_test_exit_code="0"
+sidecar_proto_test_seconds="0"
+tools_dev_test_exit_code="0"
+tools_dev_test_seconds="0"
+tools_pack_test_exit_code="0"
+tools_pack_test_seconds="0"
 
-if [ "$mode" = "setup" ] || [ "$mode" = "policy" ]; then
+if [ "$mode" = "setup" ] || [ "$mode" = "policy" ] || [ "$mode" = "unit" ]; then
   append_summary ""
   append_summary "### Install"
   append_summary ""
@@ -248,6 +265,66 @@ if [ "$mode" = "policy" ] && [ "$install_exit_code" = "0" ]; then
   fi
 fi
 
+record_unit_result() {
+  local label="$1"
+  local exit_code="$2"
+  local seconds="$3"
+
+  append_summary "| \`$label\` | \`$exit_code\` | \`$seconds\` |"
+  if [ "$exit_code" != "0" ] && [ "$unit_status" = "ok" ]; then
+    unit_status="failed"
+    unit_exit_code="$exit_code"
+  fi
+}
+
+if [ "$mode" = "unit" ] && [ "$install_exit_code" = "0" ]; then
+  append_summary ""
+  append_summary "### Workspace unit tests"
+  append_summary ""
+  append_summary "| Check | Exit code | Seconds |"
+  append_summary "| --- | ---: | ---: |"
+
+  unit_status="ok"
+  unit_start="$(date +%s)"
+
+  run_ci_command "@open-design/contracts test" pnpm --filter @open-design/contracts test
+  contracts_test_exit_code="$last_command_exit_code"
+  contracts_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/contracts" "$contracts_test_exit_code" "$contracts_test_seconds"
+
+  run_ci_command "@open-design/host test" pnpm --filter @open-design/host test
+  host_test_exit_code="$last_command_exit_code"
+  host_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/host" "$host_test_exit_code" "$host_test_seconds"
+
+  run_ci_command "@open-design/platform test" pnpm --filter @open-design/platform test
+  platform_test_exit_code="$last_command_exit_code"
+  platform_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/platform" "$platform_test_exit_code" "$platform_test_seconds"
+
+  run_ci_command "@open-design/sidecar test" pnpm --filter @open-design/sidecar test
+  sidecar_test_exit_code="$last_command_exit_code"
+  sidecar_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/sidecar" "$sidecar_test_exit_code" "$sidecar_test_seconds"
+
+  run_ci_command "@open-design/sidecar-proto test" pnpm --filter @open-design/sidecar-proto test
+  sidecar_proto_test_exit_code="$last_command_exit_code"
+  sidecar_proto_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/sidecar-proto" "$sidecar_proto_test_exit_code" "$sidecar_proto_test_seconds"
+
+  run_ci_command "@open-design/tools-dev test" pnpm --filter @open-design/tools-dev test
+  tools_dev_test_exit_code="$last_command_exit_code"
+  tools_dev_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/tools-dev" "$tools_dev_test_exit_code" "$tools_dev_test_seconds"
+
+  run_ci_command "@open-design/tools-pack test" pnpm --filter @open-design/tools-pack test
+  tools_pack_test_exit_code="$last_command_exit_code"
+  tools_pack_test_seconds="$last_command_seconds"
+  record_unit_result "@open-design/tools-pack" "$tools_pack_test_exit_code" "$tools_pack_test_seconds"
+
+  unit_seconds="$(( $(date +%s) - unit_start ))"
+fi
+
 if [ -n "$pnpm_store" ] && [ -d "$pnpm_store" ]; then
   pnpm_store_size="$(du -sh "$pnpm_store" 2>/dev/null | awk '{print $1}')"
 fi
@@ -264,6 +341,8 @@ append_summary "| node_modules size | \`$node_modules_size\` |"
 append_summary "| pnpm store size | \`$pnpm_store_size\` |"
 append_summary "| Policy status | \`$policy_status\` |"
 append_summary "| Policy seconds | \`$policy_seconds\` |"
+append_summary "| Unit status | \`$unit_status\` |"
+append_summary "| Unit seconds | \`$unit_seconds\` |"
 
 cat > "$manifest" <<JSON
 {
@@ -300,6 +379,23 @@ cat > "$manifest" <<JSON
   "guardSeconds": "$(json_escape "$guard_seconds")",
   "i18nExitCode": "$(json_escape "$i18n_exit_code")",
   "i18nSeconds": "$(json_escape "$i18n_seconds")",
+  "unitStatus": "$(json_escape "$unit_status")",
+  "unitExitCode": "$(json_escape "$unit_exit_code")",
+  "unitSeconds": "$(json_escape "$unit_seconds")",
+  "contractsTestExitCode": "$(json_escape "$contracts_test_exit_code")",
+  "contractsTestSeconds": "$(json_escape "$contracts_test_seconds")",
+  "hostTestExitCode": "$(json_escape "$host_test_exit_code")",
+  "hostTestSeconds": "$(json_escape "$host_test_seconds")",
+  "platformTestExitCode": "$(json_escape "$platform_test_exit_code")",
+  "platformTestSeconds": "$(json_escape "$platform_test_seconds")",
+  "sidecarTestExitCode": "$(json_escape "$sidecar_test_exit_code")",
+  "sidecarTestSeconds": "$(json_escape "$sidecar_test_seconds")",
+  "sidecarProtoTestExitCode": "$(json_escape "$sidecar_proto_test_exit_code")",
+  "sidecarProtoTestSeconds": "$(json_escape "$sidecar_proto_test_seconds")",
+  "toolsDevTestExitCode": "$(json_escape "$tools_dev_test_exit_code")",
+  "toolsDevTestSeconds": "$(json_escape "$tools_dev_test_seconds")",
+  "toolsPackTestExitCode": "$(json_escape "$tools_pack_test_exit_code")",
+  "toolsPackTestSeconds": "$(json_escape "$tools_pack_test_seconds")",
   "dockerVersion": "$(json_escape "$docker_version")",
   "dockerStatus": "$(json_escape "$docker_status")",
   "rootDisk": "$(json_escape "$disk_root")",
@@ -315,4 +411,8 @@ fi
 
 if [ "$policy_exit_code" != "0" ]; then
   exit "$policy_exit_code"
+fi
+
+if [ "$unit_exit_code" != "0" ]; then
+  exit "$unit_exit_code"
 fi
