@@ -81,6 +81,7 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'html-video'
     | 'plugins'
     /*
      * `library` is kept as an alias for the dropdown trigger so older
@@ -199,7 +200,8 @@ export function Header({
                 className={
                   active === 'product' ||
                   active === 'home' ||
-                  active === 'html-anything'
+                  active === 'html-anything' ||
+                  active === 'html-video'
                     ? 'is-active'
                     : undefined
                 }
@@ -235,6 +237,18 @@ export function Header({
                     <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
                     <span className='dropdown-blurb'>
                       {productMenuCopy.htmlAnythingBlurb}
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-video/')}
+                    className={linkClass('html-video')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlVideoBlurb}
                     </span>
                   </a>
                 </li>
