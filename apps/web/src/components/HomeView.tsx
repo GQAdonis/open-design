@@ -1368,11 +1368,9 @@ export function HomeView({
       designSystemOptions,
       trimmed,
     );
-    // Inputs used to (re)apply the plugin: design-system selection folded in,
-    // but the deferred footer/media fields kept so the apply still validates
-    // its required inputs (e.g. od-media-generation needs `subject`, hyperframes
-    // needs `model` to pick its pipeline). Stripping them here would change
-    // `inputsEqual` and force a needless re-apply.
+    // Composer inputs with the design-system selection folded in. The deferred
+    // footer/media fields are stripped from this set just below to form the
+    // run-facing inputs.
     const submittedApplyInputs = submittedActive
       ? applyHomeDesignSystemSelectionToInputs(
           submittedActive.inputs,
@@ -1380,22 +1378,30 @@ export function HomeView({
           designSystemOptions,
         )
       : defaultInputs;
-    // Inputs forwarded to the run: drop every now-hidden footer/media setting so
-    // the first-turn AskUserQuestion flow collects them instead of inheriting a
-    // baked-in default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …).
+    // Inputs forwarded to the run AND used to build the run-facing snapshot:
+    // drop every now-hidden footer/media setting so the first-turn
+    // AskUserQuestion flow collects them instead of inheriting a baked-in
+    // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
+    // snapshot is resolved from these stripped inputs too — the daemon renders
+    // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
+    // re-ask about anything listed there, so leaving the deferred defaults in
+    // the snapshot would suppress the discovery flow even though
+    // `onSubmit.pluginInputs` was stripped. Stripping only removes non-required
+    // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
+    // od-media-generation apply still validates.
     const submittedPluginInputs = submittedActive
       ? stripArtifactFooterInputs(submittedApplyInputs)
       : defaultInputs;
     const activeInputsChangedForSubmit = submittedActive
-      ? !inputsEqual(submittedActive.inputs, submittedApplyInputs)
+      ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
       : false;
     if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
-      const result = await resolveActivePlugin(submittedActive.record, submittedApplyInputs);
+      const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
       if (!result) {
         setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
         return;
       }
-      submittedActive = { ...submittedActive, result, inputs: submittedApplyInputs };
+      submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
       setActive(submittedActive);
     }
     // Reconcile each selected context against the serialized prompt text before

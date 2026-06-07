@@ -328,6 +328,43 @@ describe('HomeView media composer options', () => {
     }
   });
 
+  it('resolves the run-facing snapshot from inputs with the deferred media settings stripped', async () => {
+    // Regression at the prompt/run boundary: the daemon renders `## Plugin
+    // inputs` verbatim from `snapshot.inputs` and tells the agent not to re-ask
+    // about anything listed there. The snapshot's inputs come from the body of
+    // the `/apply` call that yields `appliedPluginSnapshotId`, so submission
+    // must re-apply with the deferred footer/media fields stripped — otherwise
+    // the run prompt carries `ratio: 16:9` / `duration: 5` / `model: …` and the
+    // first-turn AskUserQuestion discovery flow stays suppressed even though
+    // `onSubmit.pluginInputs` was stripped.
+    const fetchMock = stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
+
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
+    await setHomePrompt('Create a launch teaser.');
+    await submitHome();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const [{ appliedPluginSnapshotId }] = onSubmit.mock.calls[0] as [{ appliedPluginSnapshotId?: string | null }];
+    expect(appliedPluginSnapshotId).toBe('snap-od-media-generation');
+
+    // The apply call that produced the forwarded snapshot is the LAST media
+    // apply: its inputs become `snapshot.inputs`, so they must already be free
+    // of the deferred settings.
+    const applyCalls = fetchMock.mock.calls.filter(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
+    ));
+    expect(applyCalls.length).toBeGreaterThan(0);
+    const snapshotInputs = JSON.parse(String(applyCalls.at(-1)?.[1]?.body)).inputs as Record<string, unknown>;
+    for (const deferred of ['model', 'ratio', 'resolution', 'duration', 'audioType', 'voice']) {
+      expect(snapshotInputs).not.toHaveProperty(deferred);
+    }
+    // The required brief inputs the apply validates against survive the strip.
+    expect(snapshotInputs).toHaveProperty('subject');
+  });
+
   it('submits HyperFrames as a video project with the hyperframes-html model', async () => {
     stubFetch();
     const onSubmit = vi.fn();
@@ -335,16 +372,17 @@ describe('HomeView media composer options', () => {
 
     await clickHomeRailChip('hyperframes');
     await setHomePrompt('Create a HyperFrames launch bumper.');
-    await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    // submit() re-applies the plugin from the deferral-stripped inputs before
+    // forwarding, so onSubmit fires after the apply round-trip resolves.
+    await submitHome();
 
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       projectKind: 'video',
       projectMetadata: expect.objectContaining({
         kind: 'video',
         videoModel: 'hyperframes-html',
       }),
-    }));
+    })));
   });
 
   it('preserves od-media-generation required inputs when applying media chips', async () => {
