@@ -488,6 +488,52 @@ describe("copyBundledPlaywrightChromium", () => {
     }
   });
 
+  it("keeps synthetic Playwright bundles out of the shared cache", async () => {
+    const originalBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-playwright-fixture-"));
+    const workspaceRoot = join(root, "workspace");
+    const sharedCacheRoot = join(root, "shared-cache");
+    process.env.PLAYWRIGHT_BROWSERS_PATH = sharedCacheRoot;
+
+    await mkdir(join(workspaceRoot, "apps", "daemon"), { recursive: true });
+    await writeFile(
+      join(workspaceRoot, "apps", "daemon", "package.json"),
+      "{\"name\":\"@open-design/daemon-test-fixture\"}\n",
+      "utf8",
+    );
+    await mkdir(join(workspaceRoot, "apps", "daemon", "node_modules", "playwright"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(workspaceRoot, "apps", "daemon", "node_modules", "playwright", "index.js"),
+      [
+        "const { join } = require('node:path');",
+        "exports.chromium = {",
+        "  executablePath() {",
+        "    const root = process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(__dirname, '..', '..', '..', '..', 'shared-cache');",
+        "    return join(root, 'chromium-1234', 'chrome-linux', 'chrome');",
+        "  },",
+        "};",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const playwrightFixture = await ensureDaemonPlaywrightFixture(workspaceRoot);
+
+    try {
+      expect(playwrightFixture.headedRoot.startsWith(sharedCacheRoot)).toBe(false);
+      await expect(access(playwrightFixture.executablePath)).resolves.toBeUndefined();
+    } finally {
+      await playwrightFixture.cleanup();
+      await expect(access(playwrightFixture.headedRoot)).rejects.toThrow();
+      expect(process.env.PLAYWRIGHT_BROWSERS_PATH).toBe(sharedCacheRoot);
+      await rm(root, { force: true, recursive: true });
+      if (originalBrowsersPath == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      else process.env.PLAYWRIGHT_BROWSERS_PATH = originalBrowsersPath;
+    }
+  });
+
   it("fails when only the headless shell bundle is available for a channel launch", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-playwright-shell-only-"));
     const resourceRoot = join(root, "resources", "open-design");

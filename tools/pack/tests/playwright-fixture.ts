@@ -1,5 +1,7 @@
-import { chmod, lstat, mkdir, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import process from "node:process";
 
 import { resolveDaemonPlaywrightChromiumExecutablePath } from "../src/resources.js";
 
@@ -19,7 +21,9 @@ export async function ensureDaemonPlaywrightFixture(workspaceRoot: string): Prom
   headedRoot: string;
   headlessRoot: string;
 }> {
-  const executablePath = resolveDaemonPlaywrightChromiumExecutablePath(workspaceRoot);
+  const originalBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  let temporaryBrowsersPath: string | null = null;
+  let executablePath = resolveDaemonPlaywrightChromiumExecutablePath(workspaceRoot);
   let headedRoot = dirname(executablePath);
   while (!/^chromium-(\d+)$/i.test(basename(headedRoot))) {
     const parent = dirname(headedRoot);
@@ -28,13 +32,27 @@ export async function ensureDaemonPlaywrightFixture(workspaceRoot: string): Prom
     }
     headedRoot = parent;
   }
-  const chromeDir = dirname(executablePath);
   const revisionMatch = basename(headedRoot).match(/^chromium-(\d+)$/i);
   if (!revisionMatch) {
     throw new Error(`tools-pack tests: unexpected Playwright Chromium root ${headedRoot}`);
   }
   const revision = revisionMatch[1];
-  const headlessRoot = join(dirname(headedRoot), `chromium_headless_shell-${revision}`);
+  let headlessRoot = join(dirname(headedRoot), `chromium_headless_shell-${revision}`);
+  if (!(await pathExists(headedRoot))) {
+    temporaryBrowsersPath = await mkdtemp(join(tmpdir(), "open-design-playwright-fixture-"));
+    process.env.PLAYWRIGHT_BROWSERS_PATH = temporaryBrowsersPath;
+    executablePath = resolveDaemonPlaywrightChromiumExecutablePath(workspaceRoot);
+    headedRoot = dirname(executablePath);
+    while (!/^chromium-(\d+)$/i.test(basename(headedRoot))) {
+      const parent = dirname(headedRoot);
+      if (parent === headedRoot) {
+        throw new Error(`tools-pack tests: unexpected Playwright Chromium root ${executablePath}`);
+      }
+      headedRoot = parent;
+    }
+    headlessRoot = join(dirname(headedRoot), `chromium_headless_shell-${revision}`);
+  }
+  const chromeDir = dirname(executablePath);
   const headlessSentinel = join(headlessRoot, "HEADLESS_SENTINEL");
   if (!(await pathExists(headedRoot))) {
     await mkdir(chromeDir, { recursive: true });
@@ -52,10 +70,13 @@ export async function ensureDaemonPlaywrightFixture(workspaceRoot: string): Prom
   }
 
   return {
-    // These tests share the daemon-resolved Playwright cache roots across
-    // multiple Vitest workers. Removing the synthetic bundle during one file's
-    // teardown can race another file that is still hashing or copying it.
-    cleanup: async () => {},
+    cleanup: async () => {
+      if (temporaryBrowsersPath != null) {
+        if (originalBrowsersPath == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+        else process.env.PLAYWRIGHT_BROWSERS_PATH = originalBrowsersPath;
+        await rm(temporaryBrowsersPath, { force: true, recursive: true });
+      }
+    },
     executablePath,
     headlessSentinel,
     headedRoot,
