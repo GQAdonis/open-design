@@ -10598,15 +10598,13 @@ export async function startServer({
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
         if (snap?.pluginId) {
+          const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
+          for (const craft of getSnapshotContextCraft(snap)) {
+            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+          }
           const plugin = getInstalledPlugin(db, snap.pluginId);
           if (plugin) {
-            const [{ getPluginContextCraft }, { loadPluginLocalSkill }] = await Promise.all([
-              import('./plugins/context-craft.js'),
-              import('./plugins/local-skill.js'),
-            ]);
-            for (const craft of getPluginContextCraft(plugin)) {
-              if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
-            }
+            const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
             const local = await loadPluginLocalSkill(plugin);
             if (local) {
               skillBody = local.body + composedSkillBlocks;

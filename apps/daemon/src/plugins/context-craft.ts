@@ -1,7 +1,18 @@
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
 
 export function getPluginContextCraft(plugin: InstalledPluginRecord): string[] {
-  const declared = plugin.manifest.od?.context?.craft;
+  return getManifestContextCraft(plugin.manifest);
+}
+
+export function getManifestContextCraft(manifest: PluginManifest): string[] {
+  return normalizeCraftRequires(manifest.od?.context?.craft);
+}
+
+export function getSnapshotContextCraft(snapshot: AppliedPluginSnapshot): string[] {
+  return normalizeCraftRequires(snapshot.craftRequires);
+}
+
+function normalizeCraftRequires(declared: unknown): string[] {
   if (!Array.isArray(declared) || declared.length === 0) return [];
 
   const seen = new Set<string>();
