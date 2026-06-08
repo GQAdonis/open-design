@@ -279,6 +279,11 @@ export async function writeAssembledApp(
     join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
     join(paths.assembledAppRoot, "preload.cjs"),
   );
+  await cp(
+    join(config.workspaceRoot, "apps", "desktop", "src", "main", "assets"),
+    join(paths.assembledAppRoot, "assets"),
+    { recursive: true },
+  );
   const tarballByPackage = Object.fromEntries(
     packedTarballs.map((entry) => [entry.packageName, entry.fileName] as const),
   );

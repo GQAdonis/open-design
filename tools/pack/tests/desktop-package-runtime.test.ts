@@ -11,6 +11,7 @@ const packagedSourcePath = join(repoRoot, "apps", "packaged", "src", "index.ts")
 function readDesktopPackageJson(): {
   exports?: Record<string, { default?: string; types?: string }>;
   files?: string[];
+  scripts?: Record<string, string>;
 } {
   return JSON.parse(readFileSync(join(desktopPackageRoot, "package.json"), "utf8"));
 }
@@ -22,9 +23,10 @@ describe("desktop package runtime shape", () => {
     expect(pkg.files).toEqual(["dist"]);
     expect(pkg.exports?.["./main"]?.default).toBe("./dist/main/index.js");
     expect(pkg.exports?.["./main"]?.types).toBe("./dist/main/index.d.ts");
+    expect(pkg.scripts?.build).toContain("tsx ./scripts/copy-assets.ts");
   });
 
-  it("places the sandbox preload next to packaged app entrypoints", () => {
+  it("places desktop runtime assets next to packaged app entrypoints", () => {
     const packagedSource = readFileSync(packagedSourcePath, "utf8");
     expect(packagedSource).toContain('preloadPath: join(app.getAppPath(), "preload.cjs")');
 
@@ -36,6 +38,8 @@ describe("desktop package runtime shape", () => {
       const source = readFileSync(join(repoRoot, relativePath), "utf8");
       expect(source).toContain('"apps", "desktop", "dist", "main", "preload.cjs"');
       expect(source).toContain('join(paths.assembledAppRoot, "preload.cjs")');
+      expect(source).toContain('"apps", "desktop", "src", "main", "assets"');
+      expect(source).toContain('join(paths.assembledAppRoot, "assets")');
     }
   });
 });

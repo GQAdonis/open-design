@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, session, shell } from "electron";
@@ -19,7 +19,6 @@ import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesig
 
 import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
-import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 
@@ -235,6 +234,7 @@ const MIN_SPLASH_MS = 2000;
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
 const WEB_MOUNT_REVEAL_TIMEOUT_MS = 15000;
+const SPLASH_VIDEO_FILE_NAME = "startup-splash.webm";
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_CONSOLE_ENTRIES = 200;
@@ -791,11 +791,19 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
+function resolveSplashVideoUrl(): string {
+  const videoPath = app.isPackaged
+    ? join(app.getAppPath(), "assets", SPLASH_VIDEO_FILE_NAME)
+    : resolve(dirname(fileURLToPath(import.meta.url)), "assets", SPLASH_VIDEO_FILE_NAME);
+  return pathToFileURL(videoPath).href;
+}
+
 // White-background startup splash shown while the web runtime boots. It plays
 // the brand intro clip once (no loop) and then freezes on its final settled
-// "Open design" frame, which doubles as the hold state when the app takes longer
-// than `MIN_SPLASH_MS` to come up. The clip is embedded as a base64 data URL so
-// it renders identically in dev and in packaged builds (see `splash-video.ts`).
+// frame, which doubles as the hold state when the app takes longer than
+// `MIN_SPLASH_MS` to come up. The clip is a desktop-owned file asset: dev reads
+// it next to this source file, and tools-pack copies it next to packaged app
+// entrypoints under `assets/`.
 function createPendingHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
@@ -831,7 +839,7 @@ function createPendingHtml(): string {
       muted
       playsinline
       disablepictureinpicture
-      src="${SPLASH_VIDEO_DATA_URL}"
+      src="${resolveSplashVideoUrl()}"
     ></video>
     <script>
       (function () {
