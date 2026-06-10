@@ -1991,6 +1991,11 @@ export interface Dict {
   'chat.amrPreflight.useAmrNowCta': string;
   'chat.amrPreflight.configureCta': string;
   'chat.amrPreflight.closeAria': string;
+  'chat.amrPreflight.meta': string;
+  'chat.amrPreflight.signInUseAmrCta': string;
+  'chat.amrPreflight.pendingNotice': string;
+  'settings.amrRescueHint': string;
+  'settings.amrRescueCta': string;
   'chat.amrError.authMessage': string;
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;

@@ -1395,6 +1395,27 @@ export function SettingsDialog({
     };
   }, [initialHighlight, activeSection]);
 
+  // Config-failure rescue (PR2): when a CLI or BYOK connection test fails,
+  // offer the hosted AMR models as the way to keep going. Switches the draft
+  // config to daemon/AMR and replays the same scroll + pulse + coachmark the
+  // failed-run nudge uses, so the user lands directly on the sign-in step.
+  // Gated on `available` because the AMR agent card itself only renders for
+  // installed agents — offering the rescue without the card would dead-end.
+  const amrRescueAvailable = agents.some((a) => a.id === 'amr' && a.available);
+  const handleUseAmrRescue = useCallback(() => {
+    recordAmrEntry(analytics.track, 'settings_config_failure_amr');
+    setCfg((c) => ({ ...c, mode: 'daemon' as const, agentId: 'amr' }));
+    // The daemon pane (and the AMR card ref) only exists after the mode
+    // switch re-renders, so defer the scroll/highlight past that render.
+    window.setTimeout(() => {
+      amrCardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setAmrCoachmarkDismissed(false);
+      setAmrHighlightActive(true);
+      setAmrCoachmarkArmed(true);
+    }, 80);
+    window.setTimeout(() => setAmrHighlightActive(false), 3200);
+  }, [analytics.track]);
+
   const selectedMemoryChatAgent =
     cfg.mode === 'daemon' && cfg.agentId
       ? agents.find((agent) => agent.id === cfg.agentId) ?? null
@@ -3705,6 +3726,11 @@ export function SettingsDialog({
                                     </p>
                                     {!agentTestState.result.ok ? (
                                       <div className="settings-test-actions">
+                                        {amrRescueAvailable && !isAmrAgent ? (
+                                          <span className="settings-test-actions-hint">
+                                            {t('settings.amrRescueHint')}
+                                          </span>
+                                        ) : null}
                                         <div className="settings-test-actions-row">
                                           <button
                                             type="button"
@@ -3714,6 +3740,15 @@ export function SettingsDialog({
                                             <Icon name="reload" size={13} />
                                             <span>{t('settings.testRetry')}</span>
                                           </button>
+                                          {amrRescueAvailable && !isAmrAgent ? (
+                                            <button
+                                              type="button"
+                                              className="settings-test-btn"
+                                              onClick={handleUseAmrRescue}
+                                            >
+                                              {t('settings.amrRescueCta')}
+                                            </button>
+                                          ) : null}
                                         </div>
                                       </div>
                                     ) : null}
@@ -4073,6 +4108,24 @@ export function SettingsDialog({
                   onTestProvider={() => handleTestProvider()}
                 />
               </div>
+              {amrRescueAvailable &&
+              providerTestState.status === 'done' &&
+              !providerTestState.result.ok ? (
+                <div className="settings-test-actions settings-byok-amr-rescue">
+                  <span className="settings-test-actions-hint">
+                    {t('settings.amrRescueHint')}
+                  </span>
+                  <div className="settings-test-actions-row">
+                    <button
+                      type="button"
+                      className="settings-test-btn"
+                      onClick={handleUseAmrRescue}
+                    >
+                      {t('settings.amrRescueCta')}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {byokPreconditionNotice && !byokPreconditionNotice.field ? (
                 <p
                   className="settings-test-status error"

@@ -3974,6 +3974,19 @@ export function ProjectView({
     },
     [handleSwitchToAmr],
   );
+  // Draft handed back to ChatPane when the pending AMR auto-send is cancelled
+  // or times out, so the prompt is restored to the composer instead of lost.
+  const [amrPendingRestoreDraft, setAmrPendingRestoreDraft] =
+    useState<AmrPreflightSendDraft | null>(null);
+  const cancelPendingAmrSend = useCallback(() => {
+    setPendingAmrSend((draft) => {
+      if (draft) setAmrPendingRestoreDraft(draft);
+      return null;
+    });
+  }, []);
+  const handleAmrPendingRestoreHandled = useCallback(() => {
+    setAmrPendingRestoreDraft(null);
+  }, []);
   // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
   // so the auth banner offers a one-click "Sign in via terminal"
   // button that POSTs to the daemon. The daemon opens a system
@@ -4045,14 +4058,16 @@ export function ProjectView({
     void trySend();
     const interval = setInterval(() => void trySend(), 2000);
     const stop = setTimeout(() => {
-      if (!cancelled) setPendingAmrSend(null);
+      // Timed out waiting for sign-in: hand the draft back to the composer
+      // (via cancelPendingAmrSend) instead of silently dropping the prompt.
+      if (!cancelled) cancelPendingAmrSend();
     }, 5 * 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(interval);
       clearTimeout(stop);
     };
-  }, [pendingAmrSend, config.mode, config.agentId, handleSend]);
+  }, [pendingAmrSend, config.mode, config.agentId, handleSend, cancelPendingAmrSend]);
 
   useEffect(() => {
     if (!autoAuditRepairSeed) return;
@@ -5633,6 +5648,10 @@ export function ProjectView({
               onOpenAmrSettings={onOpenAmrSettings}
               onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
               onSwitchToAmrAndSend={handleSwitchToAmrAndSend}
+              amrPendingSendActive={Boolean(pendingAmrSend)}
+              onCancelAmrPendingSend={cancelPendingAmrSend}
+              amrPendingRestoreDraft={amrPendingRestoreDraft}
+              onAmrPendingRestoreHandled={handleAmrPendingRestoreHandled}
               onLaunchAntigravityOauth={handleLaunchAntigravityOauth}
               onOpenMcpSettings={onOpenMcpSettings}
               onBrowsePlugins={onBrowsePlugins}

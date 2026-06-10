@@ -529,6 +529,15 @@ interface Props {
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
   onSwitchToAmrAndSend?: (draft: AmrPreflightSendDraft) => void;
+  // While ProjectView waits for the AMR sign-in before auto-sending an
+  // intercepted draft, surface a visible pending strip above the composer
+  // instead of leaving the user with no feedback. If that wait is cancelled
+  // or times out, the parent hands the draft back so it can be restored
+  // into the composer rather than silently dropped.
+  amrPendingSendActive?: boolean;
+  onCancelAmrPendingSend?: () => void;
+  amrPendingRestoreDraft?: AmrPreflightSendDraft | null;
+  onAmrPendingRestoreHandled?: () => void;
   // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
   // so the auth banner offers a "Sign in via terminal" button that
   // POSTs to /api/agents/antigravity/oauth-launch. Handler resolves
@@ -724,6 +733,10 @@ export function ChatPane({
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
   onSwitchToAmrAndSend,
+  amrPendingSendActive = false,
+  onCancelAmrPendingSend,
+  amrPendingRestoreDraft = null,
+  onAmrPendingRestoreHandled,
   onLaunchAntigravityOauth,
   onOpenMcpSettings,
   onBrowsePlugins,
@@ -966,6 +979,24 @@ export function ChatPane({
   );
   const [amrPreflightDraft, setAmrPreflightDraft] =
     useState<AmrPreflightBlockedDraft | null>(null);
+  // Whether the user is already signed in to AMR — only used to pick the
+  // honest CTA label ("Use AMR" vs "Sign in & use AMR") while the preflight
+  // dialog is open. `null` (unknown / still loading) keeps the default label.
+  const [amrSignedIn, setAmrSignedIn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!amrPreflightDraft) return;
+    let cancelled = false;
+    setAmrSignedIn(null);
+    void import('../providers/daemon')
+      .then(({ fetchVelaLoginStatus }) => fetchVelaLoginStatus())
+      .then((status) => {
+        if (!cancelled) setAmrSignedIn(status?.loggedIn === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [amrPreflightDraft]);
   const restoreBlockedSendToComposer = useCallback((draft: AmrPreflightSendDraft) => {
     if (typeof window === 'undefined') return;
     window.setTimeout(() => {
@@ -980,6 +1011,13 @@ export function ChatPane({
   const dismissAmrPreflight = useCallback(() => {
     setAmrPreflightDraft(null);
   }, []);
+  // The pending AMR auto-send was cancelled or timed out upstream: put the
+  // prompt back into the composer so it is never lost.
+  useEffect(() => {
+    if (!amrPendingRestoreDraft) return;
+    restoreBlockedSendToComposer(amrPendingRestoreDraft);
+    onAmrPendingRestoreHandled?.();
+  }, [amrPendingRestoreDraft, onAmrPendingRestoreHandled, restoreBlockedSendToComposer]);
   const configureBlockedModel = useCallback(() => {
     setAmrPreflightDraft(null);
     onOpenSettings?.('execution');
@@ -2205,6 +2243,23 @@ export function ChatPane({
             onReorder={onReorderQueuedSends}
             onSendNow={onSendQueuedNow}
           />
+          {amrPendingSendActive ? (
+            <div className="amr-pending-send-strip" role="status" aria-live="polite">
+              <Icon name="spinner" size={13} className="icon-spin" />
+              <span className="amr-pending-send-strip__text">
+                {t('chat.amrPreflight.pendingNotice')}
+              </span>
+              {onCancelAmrPendingSend ? (
+                <button
+                  type="button"
+                  className="amr-pending-send-strip__cancel"
+                  onClick={onCancelAmrPendingSend}
+                >
+                  {t('common.cancel')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <div
             className="chat-composer-slot"
             ref={composerSlotRef}
@@ -2233,6 +2288,7 @@ export function ChatPane({
             ? createPortal(
                 <AmrPreflightDialog
                   issueKind={amrPreflightDraft.issueKind}
+                  signedIn={amrSignedIn}
                   onClose={dismissAmrPreflight}
                   onUseAmr={continueBlockedSendWithAmr}
                   onConfigure={configureBlockedModel}
@@ -2249,6 +2305,8 @@ export function ChatPane({
 
 interface AmrPreflightDialogProps {
   issueKind: AmrSendPreflightIssueKind;
+  /** AMR login status; `null` = unknown (lookup pending or failed). */
+  signedIn: boolean | null;
   onClose: () => void;
   onUseAmr: () => void;
   onConfigure: () => void;
@@ -2257,6 +2315,7 @@ interface AmrPreflightDialogProps {
 
 function AmrPreflightDialog({
   issueKind,
+  signedIn,
   onClose,
   onUseAmr,
   onConfigure,
@@ -2292,6 +2351,7 @@ function AmrPreflightDialog({
         <p className="amr-preflight-detail">
           {t(amrPreflightDetailKey(issueKind))}
         </p>
+        <p className="amr-preflight-meta">{t('chat.amrPreflight.meta')}</p>
         <div className="amr-preflight-actions">
           <button
             type="button"
@@ -2305,7 +2365,9 @@ function AmrPreflightDialog({
             className="amr-preflight-primary"
             onClick={onUseAmr}
           >
-            {t('chat.amrPreflight.useAmrCta')}
+            {signedIn === false
+              ? t('chat.amrPreflight.signInUseAmrCta')
+              : t('chat.amrPreflight.useAmrCta')}
             <Icon name="arrow-left" size={14} style={{ transform: 'rotate(180deg)' }} />
           </button>
         </div>
