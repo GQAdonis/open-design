@@ -64,23 +64,13 @@ const script = `
   };
 
   const bindSwitchers = () => {
-    // Each locale entry is a real <a> link whose href is computed server-side
-    // by <Header /> from the current pathname, so it already points at the
-    // localized version of the current page (works with no JS, right-click →
-    // "open in new tab", and crawlers). The click handler's only job is to
-    // persist the user's choice so future visits to '/' auto-route to it.
+    // Each locale entry is a real <a> link with a server-computed href, so
+    // navigation happens for free (and survives right-click → "open in new
+    // tab"). The click handler's only job is to persist the user's choice
+    // so future visits to '/' auto-route to it.
     for (const link of document.querySelectorAll('[data-locale-link]')) {
       if (link.dataset.localeBound === 'true') continue;
       link.dataset.localeBound = 'true';
-      // SSR builds the correct localized path but can't know the live query
-      // string / hash (e.g. a filtered index like ?kind=deck#section). Append
-      // them so switching language preserves that state. We only add the
-      // tail, never rewrite the server-rendered path.
-      const tail = window.location.search + window.location.hash;
-      if (tail) {
-        const base = link.getAttribute('href');
-        if (base) link.setAttribute('href', base + tail);
-      }
       link.addEventListener('click', (event) => {
         if (event.defaultPrevented) return;
         if (event.button !== 0) return;
@@ -91,6 +81,32 @@ const script = `
         const details = link.closest('[data-locale-switch]');
         if (details && details.open) details.open = false;
       });
+    }
+
+    // Hover-to-open, matching the sibling nav dropdowns (which expand on
+    // hover). Click and keyboard still toggle the native <details>; the
+    // outside-click + Escape handlers below still close it. A short close
+    // delay tolerates the cursor crossing the gap between trigger and panel
+    // (a CSS bridge covers that gap too). Pointer must be hover-capable so
+    // touch devices keep the tap-to-toggle behaviour.
+    const hoverCapable = !window.matchMedia || window.matchMedia('(hover: hover)').matches;
+    if (hoverCapable) {
+      for (const details of document.querySelectorAll('[data-locale-switch]')) {
+        if (details.dataset.localeHoverBound === 'true') continue;
+        details.dataset.localeHoverBound = 'true';
+        let closeTimer = null;
+        const cancelClose = () => {
+          if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = null; }
+        };
+        details.addEventListener('mouseenter', () => {
+          cancelClose();
+          details.open = true;
+        });
+        details.addEventListener('mouseleave', () => {
+          cancelClose();
+          closeTimer = window.setTimeout(() => { details.open = false; }, 120);
+        });
+      }
     }
 
     // Native <details> stays open until the summary is clicked again. Add

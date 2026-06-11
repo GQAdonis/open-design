@@ -1,5 +1,4 @@
 const R2_PUBLIC_ORIGIN = 'https://static.open-design.ai';
-const REPOSITORY_ASSETS_PUBLIC_ORIGIN = 'https://repo-assets.open-design.ai';
 const IMAGE_RESIZING_ORIGIN = R2_PUBLIC_ORIGIN;
 const ASSET_PREFIX = 'landing/assets';
 
@@ -10,10 +9,6 @@ type ImageOptions = {
 
 export function r2Asset(name: string): string {
   return `${R2_PUBLIC_ORIGIN}/${ASSET_PREFIX}/${name}`;
-}
-
-export function repositoryAsset(path: string): string {
-  return `${REPOSITORY_ASSETS_PUBLIC_ORIGIN}/${path}`;
 }
 
 export function imageAsset(name: string, { width, quality = 85 }: ImageOptions): string {
@@ -40,16 +35,19 @@ export function imageAssetSrcset(
     .join(', ');
 }
 
-export const heroImage = imageAsset('hero.png', { width: 1280, quality: 82 });
+// Homepage hero art. Served from `public/hero-home.png` (a local asset)
+// rather than the R2 CDN, so it ships straight from the site origin and
+// skips the Cloudflare image-resizing variants. Single intrinsic size —
+// the browser has only one candidate to pick from.
+export const heroImage = '/hero-home.png?v=2';
+export const labStageImage = '/lab-stage-bg.jpg';
 
 /**
- * Responsive srcset for the homepage hero. Widths cover phones (768),
- * laptops at 1x (1280), retina laptops (1920) and 4K / 2x retina (2560).
+ * srcset for the homepage hero. With a single local asset there are no
+ * responsive variants to choose between, so this points at the same file
+ * tagged with its intrinsic width.
  */
-export const heroImageSrcset = imageAssetSrcset(
-  'hero.png',
-  [768, 1280, 1920, 2560],
-);
+export const heroImageSrcset = `${heroImage} 2880w`;
 
 /**
  * Default Open Graph card image. Used by every page that doesn't supply
