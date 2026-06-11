@@ -114,6 +114,16 @@ env:
   # and the helper still strips .map to keep source out of the installer.
   POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
   POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+  # github attribution for the published metadata + per-platform manifests, set
+  # workflow-wide (as release-beta.yml does) so the platform build jobs and the
+  # publish-metadata step agree on github.runId. publish-metadata.ts refuses a
+  # platform manifest whose github.{runId,commit} disagree with the publish
+  # step's, so these must stay consistent across every publish step.
+  RELEASE_BRANCH: ${{ github.ref_name }}
+  RELEASE_REPOSITORY: ${{ github.repository }}
+  RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+  RELEASE_RUN_ID: ${{ github.run_id }}
+  RELEASE_WORKFLOW: ${{ github.workflow }}
 
 jobs:
   metadata:
@@ -472,6 +482,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -582,6 +593,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -802,6 +814,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -948,6 +961,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
