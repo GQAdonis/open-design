@@ -67,6 +67,44 @@ jobs:
         with:
           node-version: 24
 
+      - name: Validate manual override combinations
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_sha='${{ inputs.target_sha }}'
+          target_event='${{ inputs.target_event }}'
+          runner_run_id='${{ inputs.runner_run_id }}'
+          hosted_run_id='${{ inputs.hosted_run_id }}'
+          has_target_override=0
+          has_run_id_override=0
+
+          if [ -n "$target_sha" ] || [ -n "$target_event" ]; then
+            has_target_override=1
+          fi
+
+          if [ -n "$runner_run_id" ] || [ -n "$hosted_run_id" ]; then
+            has_run_id_override=1
+          fi
+
+          # Manual-only parking rule:
+          # - no overrides: ci-gate may dispatch fresh provider runs itself
+          # - explicit historical aggregation: both run ids must be supplied
+          #
+          # Do not "relax" this by letting target overrides proceed without both
+          # run ids. ci-gate can only bootstrap fresh child runs for the current
+          # ref / workflow_dispatch event, so a looser combination would just
+          # poll until timeout.
+          if [ "$has_target_override" = "1" ] && [ -z "$runner_run_id" -o -z "$hosted_run_id" ]; then
+            echo "target_sha/target_event overrides require both runner_run_id and hosted_run_id" >&2
+            exit 1
+          fi
+
+          if [ "$has_run_id_override" = "1" ] && [ -z "$runner_run_id" -o -z "$hosted_run_id" ]; then
+            echo "runner_run_id and hosted_run_id must be supplied together" >&2
+            exit 1
+          fi
+
       - name: Record provider dispatch window
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id == '' && inputs.hosted_run_id == '' }}
         shell: bash
