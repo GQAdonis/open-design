@@ -1,0 +1,33 @@
+{
+  "name": "open-design",
+  "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
+  "active_phase": null,
+  "focus_project_path": "/Users/gqadonis/Projects/references/open-design",
+  "stack": "Next.js 16 + React 18 monorepo (pnpm workspaces); Electron desktop; local Node ~24 daemon",
+  "spec_paths": ["openspec/specs", "openspec/changes", "docs", "specs", "specs/current", "specs/change"],
+  "openspec_available": true,
+  "constraint_file": ".kbd-orchestrator/constraints.md",
+  "build_health_command": "pnpm guard && pnpm typecheck",
+  "test_command": "pnpm --filter @open-design/daemon test && pnpm --filter @open-design/web test",
+  "lint_command": "pnpm guard",
+  "dev_command": "pnpm tools-dev",
+  "package_manager": "pnpm@10.33.2",
+  "node_engine": "~24",
+  "ux_profile": "advanced",
+  "notes": {
+    "root_command_boundary": "Root scripts are reserved for repo-level checks and tools control-plane entrypoints only: pnpm guard, pnpm typecheck, pnpm tools-dev, pnpm tools-pack, pnpm tools-serve. Do NOT add root aggregate pnpm build/test aliases. Build/test commands must stay package-scoped (pnpm --filter <package> ...) or tool-scoped (pnpm tools-pack ...).",
+    "install_after_manifest_change": "Run pnpm install after changing package manifests, workspace layout, or command entrypoints.",
+    "desktop": "Desktop app is Electron (apps/desktop + apps/packaged), NOT Tauri. Unsigned macOS build: pnpm tools-pack mac build --to all (code signing is opt-in via --signed).",
+    "upstream": "Fork of nexu-io/open-design. origin = GQAdonis/open-design; upstream = git@github.com:nexu-io/open-design.git.",
+    "openspec": "OpenSpec 1.4.1 initialized for claude, codex, opencode, kimi. Structure at openspec/{specs,changes,changes/archive}. Slash commands: /opsx:new, /opsx:ff, /opsx:apply, /opsx:verify, /opsx:archive."
+  },
+  "preferred_planning_agent": "antigravity",
+  "preferred_execution_agents": [],
+  "agents_config": {},
+  "workspace": {
+    "workspace_file": null,
+    "folders": [
+      { "path": "/Users/gqadonis/Projects/references/open-design", "role": "focus", "write_access": true }
+    ]
+  }
+}
