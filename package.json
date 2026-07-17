@@ -61,8 +61,12 @@
       "electron",
       "electron-winstaller",
       "esbuild",
+      "node-pty",
       "protobufjs",
       "sharp"
     ]
+  },
+  "dependencies": {
+    "@prometheus-ags/prometheus-entity-management": "3.0.0-alpha.0"
   }
 }
